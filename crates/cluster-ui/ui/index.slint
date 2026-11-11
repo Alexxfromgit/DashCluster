@@ -95,6 +95,8 @@ export component MainWindow inherits Window {
     callback open-guide();
     callback close-guide();
     always-on-top: root.on-top;
+    // Keyboard shortcuts work from launch, without clicking first.
+    forward-focus: fs;
 
     init => { Palette.color-scheme = ColorScheme.dark; }
 
@@ -143,9 +145,9 @@ export component MainWindow inherits Window {
                 title: root.editor-title;
                 message: root.editor-message;
                 done => { root.toggle-edit(); }
-                undo => { root.undo(); }
-                redo => { root.redo(); }
-                save => { root.save(); }
+                undo => { fs.focus(); root.undo(); }
+                redo => { fs.focus(); root.redo(); }
+                save => { fs.focus(); root.save(); }
                 save-as => { root.save-as(); }
                 new-dashboard => { root.new-dashboard(); }
                 import => { root.import-dashboard(); }
@@ -196,10 +198,10 @@ export component MainWindow inherits Window {
                     theme-names: root.theme-names;
                     changed(key, value) => { root.prop-changed(key, value); }
                     pick-image(key) => { root.pick-image(key); }
-                    duplicate => { root.duplicate-selected(); }
-                    delete => { root.delete-selected(); }
-                    restack(d) => { root.restack(d); }
-                    align(how) => { root.align(how); }
+                    duplicate => { fs.focus(); root.duplicate-selected(); }
+                    delete => { fs.focus(); root.delete-selected(); }
+                    restack(d) => { fs.focus(); root.restack(d); }
+                    align(how) => { fs.focus(); root.align(how); }
                 }
             }
         }

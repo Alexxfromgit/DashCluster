@@ -32,6 +32,8 @@ pub struct Editor {
     pub path: Option<PathBuf>,
     pub selected: Vec<usize>,
     pub snap: bool,
+    /// Opened from a built-in dashboard: the first save suggests "<name> copy".
+    pub from_builtin: bool,
     pub message: String,
     errors: HashMap<String, String>,
     drag: Option<Drag>,
@@ -54,7 +56,16 @@ fn snap(v: f32, on: bool) -> f32 {
 
 impl Editor {
     pub fn new(doc: Doc, path: Option<PathBuf>) -> Self {
-        Editor { doc, path, selected: vec![], snap: true, message: String::new(), errors: HashMap::new(), drag: None }
+        Editor {
+            doc,
+            path,
+            selected: vec![],
+            snap: true,
+            from_builtin: false,
+            message: String::new(),
+            errors: HashMap::new(),
+            drag: None,
+        }
     }
 
     pub fn base_dir(&self) -> Option<PathBuf> {

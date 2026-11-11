@@ -279,12 +279,14 @@ impl App {
         }
         ui.set_on_top(s.always_on_top);
         ui.set_forza_port_text(s.forza_port.to_string().into());
-        let mut saved = s;
-        saved.dashboard = self.saved_settings.dashboard.clone();
-        saved.setup_seen = self.saved_settings.setup_seen;
-        saved.show_status = self.saved_settings.show_status;
-        self.saved_settings = saved;
-        self.saved_settings.save();
+        // Persist only what was changed in the panel, so a one-off command-line override
+        // (e.g. --source demo) doesn't become the saved default.
+        let saved = &mut self.saved_settings;
+        macro_rules! keep_changes {
+            ($($f:ident),*) => { $( if old.$f != s.$f { saved.$f = s.$f.clone(); } )* };
+        }
+        keep_changes!(source, forza_port, hub_address, hub_enabled, hub_port, units, start_fullscreen, always_on_top);
+        saved.save();
         ui.set_show_settings(false);
         self.toast("Settings saved");
     }
@@ -431,6 +433,7 @@ impl App {
             }
         };
         let mut ed = Editor::new(Doc::new(value), entry.path().map(PathBuf::from));
+        ed.from_builtin = entry.path().is_none();
         if entry.path().is_none() {
             ed.message = "Built-in dashboard — Save will make your own copy.".into();
         }
@@ -549,11 +552,7 @@ impl App {
             _ => {
                 let dir = library::user_dir();
                 let _ = std::fs::create_dir_all(&dir);
-                let name = if ed.path.is_none() && self.lib.current().path().is_none() {
-                    format!("{} copy", ed.name())
-                } else {
-                    ed.name()
-                };
+                let name = if ed.path.is_none() && ed.from_builtin { format!("{} copy", ed.name()) } else { ed.name() };
                 match rfd::FileDialog::new()
                     .set_title("Save dashboard")
                     .set_directory(&dir)

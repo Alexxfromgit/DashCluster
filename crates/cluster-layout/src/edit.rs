@@ -458,6 +458,13 @@ pub struct Doc {
 
 pub const MAX_UNDO: usize = 200;
 
+/// A coordinate as JSON: whole numbers stay integers (so `700` isn't rewritten as
+/// `700.0`, which would also count as a change), others keep one decimal.
+fn coord(v: f64) -> Value {
+    let r = (v * 10.0).round() / 10.0;
+    if r.fract() == 0.0 { json!(r as i64) } else { json!(r) }
+}
+
 impl Doc {
     pub fn new(value: Value) -> Doc {
         Doc { saved: value.clone(), value, undo: vec![], redo: vec![] }
@@ -539,7 +546,7 @@ impl Doc {
     pub fn set_rect_live(&mut self, i: usize, r: [f32; 4]) {
         if let Some(w) = self.widgets_mut().get_mut(i) {
             for (k, v) in ["x", "y", "w", "h"].iter().zip(r) {
-                w[*k] = json!((v * 10.0).round() / 10.0);
+                w[*k] = coord(f64::from(v));
             }
         }
     }
@@ -588,11 +595,29 @@ impl Doc {
 
     /// Adds a widget centered at (cx, cy); returns its index.
     pub fn add_widget(&mut self, kind: &str, cx: f32, cy: f32) -> Result<usize, String> {
-        let mut w = default_widget(kind);
-        let (ww, hh) = (w["w"].as_f64().unwrap_or(100.0) as f32, w["h"].as_f64().unwrap_or(100.0) as f32);
-        w["id"] = json!(self.unique_id(kind));
-        w["x"] = json!(((cx - ww / 2.0) / 10.0).round() * 10.0);
-        w["y"] = json!(((cy - hh / 2.0) / 10.0).round() * 10.0);
+        let template = default_widget(kind);
+        let (ww, hh) = (template["w"].as_f64().unwrap_or(100.0), template["h"].as_f64().unwrap_or(100.0));
+        let (mut x, mut y) =
+            (((f64::from(cx) - ww / 2.0) / 10.0).round() * 10.0, ((f64::from(cy) - hh / 2.0) / 10.0).round() * 10.0);
+        // Cascade instead of stacking new widgets exactly on top of each other.
+        while self.widgets().iter().any(|o| o["x"].as_f64() == Some(x) && o["y"].as_f64() == Some(y)) {
+            x += 20.0;
+            y += 20.0;
+        }
+        // Same key order as hand-written files: id, type, position, size, then the rest.
+        let mut w = Map::new();
+        w.insert("id".into(), json!(self.unique_id(kind)));
+        w.insert("type".into(), template["type"].clone());
+        w.insert("x".into(), coord(x));
+        w.insert("y".into(), coord(y));
+        if let Value::Object(rest) = template {
+            for (k, v) in rest {
+                if k != "type" {
+                    w.insert(k, v);
+                }
+            }
+        }
+        let w = Value::Object(w);
         self.apply(|v| {
             if !v.get("widgets").is_some_and(Value::is_array) {
                 v["widgets"] = json!([]);
@@ -639,7 +664,7 @@ impl Doc {
             for (mut c, id) in copies.into_iter().zip(ids) {
                 c["id"] = json!(id);
                 for k in ["x", "y"] {
-                    c[k] = json!(c[k].as_f64().unwrap_or(0.0) + 20.0);
+                    c[k] = coord(c[k].as_f64().unwrap_or(0.0) + 20.0);
                 }
                 a.push(c);
             }
@@ -653,8 +678,8 @@ impl Doc {
             if let Some(a) = v.get_mut("widgets").and_then(Value::as_array_mut) {
                 for &i in indices {
                     if let Some(w) = a.get_mut(i) {
-                        w["x"] = json!(w["x"].as_f64().unwrap_or(0.0) + f64::from(dx));
-                        w["y"] = json!(w["y"].as_f64().unwrap_or(0.0) + f64::from(dy));
+                        w["x"] = coord(w["x"].as_f64().unwrap_or(0.0) + f64::from(dx));
+                        w["y"] = coord(w["y"].as_f64().unwrap_or(0.0) + f64::from(dy));
                     }
                 }
             }
@@ -707,8 +732,8 @@ impl Doc {
                     "vcenter" => (r[0], (y0 + y1 - r[3]) / 2.0),
                     _ => (r[0], r[1]),
                 };
-                a[*i]["x"] = json!((nx * 10.0).round() / 10.0);
-                a[*i]["y"] = json!((ny * 10.0).round() / 10.0);
+                a[*i]["x"] = coord(f64::from(nx));
+                a[*i]["y"] = coord(f64::from(ny));
             }
         })
     }
@@ -807,6 +832,18 @@ mod tests {
     }
 
     #[test]
+    fn new_widgets_cascade_and_keep_tidy_json() {
+        let mut d = Doc::new(blank_layout("x"));
+        d.add_widget("gear", 800.0, 300.0).unwrap();
+        d.add_widget("gear", 800.0, 300.0).unwrap();
+        assert_eq!(d.rect(0).unwrap()[..2], [710.0, 210.0]);
+        assert_eq!(d.rect(1).unwrap()[..2], [730.0, 230.0]);
+        let keys: Vec<&String> = d.widgets()[0].as_object().unwrap().keys().take(6).collect();
+        assert_eq!(keys, ["id", "type", "x", "y", "w", "h"]);
+        assert!(d.to_text().contains("\"x\": 710,"), "{}", d.to_text());
+    }
+
+    #[test]
     fn duplicate_remove_restack_align() {
         let mut d = doc();
         let new = d.duplicate(&[0, 1]).unwrap();
@@ -839,6 +876,12 @@ mod tests {
         assert_eq!(d.rect(0).unwrap(), [33.3, 44.0, 120.0, 60.0]);
         assert!(d.undo());
         assert_eq!(d.rect(0).unwrap()[0], 10.0);
+
+        // A drag that ends where it started is not a change.
+        let before = d.value().clone();
+        d.set_rect_live(0, [10.0, 10.0, 100.0, 50.0]);
+        assert_eq!(d.value(), &before);
+        assert_eq!(d.widgets()[0]["x"], json!(10));
     }
 
     #[test]

@@ -108,6 +108,24 @@ export component WidgetPalette inherits Rectangle {
     }
 }
 
+// A text field that follows the model value unless the user is typing in it. (Typing
+// replaces a LineEdit's `text` binding, so without this, undo or drags would leave stale
+// text in fields you had edited.)
+component SyncedEdit inherits LineEdit {
+    in property <string> value;
+    text: root.value;
+    changed value => {
+        if (!self.has-focus) {
+            self.text = self.value;
+        }
+    }
+    changed has-focus => {
+        if (!self.has-focus) {
+            self.text = self.value;
+        }
+    }
+}
+
 export component Inspector inherits Rectangle {
     in property <[PropRow]> rows;
     in property <string> title;
@@ -172,13 +190,13 @@ export component Inspector inherits Rectangle {
                             vertical-alignment: center;
                             wrap: word-wrap;
                         }
-                        if row.kind == 1 || row.kind == 2: LineEdit {
-                            text: row.value;
+                        if row.kind == 1 || row.kind == 2: SyncedEdit {
+                            value: row.value;
                             input-type: row.kind == 2 ? InputType.decimal : InputType.text;
                             edited(t) => { root.changed(row.key, t); }
                         }
-                        if row.kind == 7: LineEdit {
-                            text: row.value;
+                        if row.kind == 7: SyncedEdit {
+                            value: row.value;
                             placeholder-text: "JSON5, Enter to apply";
                             accepted(t) => { root.changed(row.key, t); }
                         }
@@ -200,15 +218,15 @@ export component Inspector inherits Rectangle {
                                 border-width: 1px;
                                 border-color: EditorTheme.line;
                             }
-                            LineEdit {
-                                text: row.value;
+                            SyncedEdit {
+                                value: row.value;
                                 placeholder-text: "#rrggbb or theme";
                                 edited(t) => { root.changed(row.key, t); }
                             }
                         }
                         if row.kind == 8: HorizontalLayout {
                             spacing: 4px;
-                            LineEdit { text: row.value; accepted(t) => { root.changed(row.key, t); } }
+                            SyncedEdit { value: row.value; accepted(t) => { root.changed(row.key, t); } }
                             Button { text: "…"; clicked => { root.pick-image(row.key); } }
                         }
                     }
