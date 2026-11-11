@@ -1,0 +1,498 @@
+// DashCluster widget library. Each widget gets its static config (`st`) and its
+// per-frame values (`fr`) from Rust; sizes are relative to the widget's own box so
+// everything scales with the dashboard.
+
+export enum WType { analog-gauge, bar-gauge, readout, gear, shift-lights, lamp, tyre-quad, g-meter, pedals, lap-timer, label, image }
+
+export struct WZone { from: float, to: float, color: color }
+
+export struct WStatic {
+    kind: WType,
+    x: float, y: float, w: float, h: float,
+    ink: color, muted: color, accent: color, face: color, danger: color, edge: color,
+    font-scale: float,
+    min: float, max: float,
+    major: int, minor: int,
+    start-angle: float, sweep: float,
+    zones: [WZone],
+    caption: string, label: string, unit: string,
+    // 0 = left, 1 = center, 2 = right
+    align: int,
+    vertical: bool,
+    show-value: bool,
+    segments: [color],
+    color: color,
+    icon: string,
+    names: [string],
+    image: image,
+    // 0 = contain, 1 = cover, 2 = fill
+    fit: int,
+    max-g: float,
+    show-last: bool,
+    show-best: bool,
+}
+
+export struct WFrame {
+    valid: bool, on: bool,
+    v0: float, v1: float, v2: float, v3: float,
+    t0: string, t1: string, t2: string, t3: string,
+    c0: color, c1: color, c2: color, c3: color,
+}
+
+global Fonts {
+    out property <string> family: "";
+}
+
+component Base inherits Rectangle {
+    in property <WStatic> st;
+    in property <WFrame> fr;
+    opacity: root.fr.valid ? 1 : 0.45;
+}
+
+// ---------------------------------------------------------------- analog gauge
+export component AnalogGaugeW inherits Base {
+    property <length> side: min(self.width, self.height);
+    property <float> span: max(0.0001, root.st.max - root.st.min);
+    property <float> frac: clamp((root.fr.v0 - root.st.min) / self.span, -0.02, 1.03);
+    property <angle> a0: root.st.start-angle * 1deg;
+    property <angle> sw: root.st.sweep * 1deg;
+    property <int> nticks: root.st.major * root.st.minor;
+
+    disc := Rectangle {
+        width: root.side;
+        height: root.side;
+        border-radius: self.width / 2;
+        background: root.st.face;
+        border-width: root.st.face.alpha > 0 ? root.side * 0.012 : 0;
+        border-color: root.st.edge;
+
+        for z in root.st.zones: Path {
+            width: 100%;
+            height: 100%;
+            viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
+            property <float> f0: clamp((z.from - root.st.min) / root.span, 0, 1);
+            property <float> f1: clamp((z.to - root.st.min) / root.span, 0, 1);
+            property <angle> b0: root.a0 + root.sw * self.f0;
+            property <angle> b1: root.a0 + root.sw * self.f1;
+            property <float> r: 87;
+            visible: self.f1 > self.f0;
+            stroke: z.color;
+            stroke-width: root.side * 0.03;
+            commands: "M " + (100 + self.r * sin(self.b0)) + " " + (100 - self.r * cos(self.b0))
+                + " A " + self.r + " " + self.r + " 0 " + ((self.b1 - self.b0) > 180deg ? 1 : 0) + " 1 "
+                + (100 + self.r * sin(self.b1)) + " " + (100 - self.r * cos(self.b1));
+        }
+
+        for i in root.nticks + 1: Path {
+            width: 100%;
+            height: 100%;
+            viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
+            property <bool> major: mod(i, root.st.minor) == 0;
+            property <angle> a: root.a0 + root.sw * i / max(1, root.nticks);
+            property <float> r0: self.major ? 76 : 81;
+            stroke: root.st.ink;
+            stroke-width: self.major ? root.side * 0.011 : root.side * 0.005;
+            commands: "M " + (100 + self.r0 * sin(self.a)) + " " + (100 - self.r0 * cos(self.a))
+                + " L " + (100 + 90 * sin(self.a)) + " " + (100 - 90 * cos(self.a));
+        }
+
+        for i in root.st.major + 1: Text {
+            property <angle> a: root.a0 + root.sw * i / max(1, root.st.major);
+            property <float> v: root.st.min + root.span * i / max(1, root.st.major);
+            x: parent.width / 2 + parent.width * 0.315 * sin(self.a) - self.width / 2;
+            y: parent.height / 2 - parent.height * 0.315 * cos(self.a) - self.height / 2;
+            text: round(self.v * 100) / 100;
+            color: root.st.ink;
+            font-size: root.side * 0.068 * root.st.font-scale;
+            font-weight: 600;
+        }
+
+        Text {
+            y: parent.height * 0.6;
+            x: (parent.width - self.width) / 2;
+            text: root.fr.t0;
+            color: root.fr.c1;
+            font-size: root.side * 0.13 * root.st.font-scale;
+            font-weight: 700;
+        }
+
+        Text {
+            y: parent.height * 0.765;
+            x: (parent.width - self.width) / 2;
+            text: root.st.caption;
+            color: root.st.muted;
+            font-size: root.side * 0.055 * root.st.font-scale;
+        }
+
+        Path {
+            width: 100%;
+            height: 100%;
+            viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
+            fill: root.st.accent;
+            property <angle> a: root.a0 + root.sw * root.frac;
+            commands: "M " + (100 + 85 * sin(self.a)) + " " + (100 - 85 * cos(self.a))
+                + " L " + (100 + 3.5 * cos(self.a)) + " " + (100 + 3.5 * sin(self.a))
+                + " L " + (100 - 16 * sin(self.a)) + " " + (100 + 16 * cos(self.a))
+                + " L " + (100 - 3.5 * cos(self.a)) + " " + (100 - 3.5 * sin(self.a)) + " Z";
+        }
+
+        Rectangle {
+            width: root.side * 0.085;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: root.st.face.alpha > 0 ? root.st.face.brighter(30%) : #1a1a1a;
+            border-width: root.side * 0.01;
+            border-color: root.st.accent;
+        }
+    }
+}
+
+// ---------------------------------------------------------------- bar gauge
+export component BarGaugeW inherits Base {
+    property <length> thick: root.st.vertical ? root.width : root.height;
+    property <length> pad: self.thick * 0.12;
+    property <float> f: clamp(root.fr.v0, 0, 1);
+
+    track := Rectangle {
+        border-radius: root.thick * 0.18;
+        background: root.st.face;
+        border-width: 1px;
+        border-color: root.st.edge;
+        clip: true;
+
+        Rectangle {
+            x: 0;
+            y: root.st.vertical ? parent.height * (1 - root.f) : 0;
+            width: root.st.vertical ? parent.width : parent.width * root.f;
+            height: root.st.vertical ? parent.height * root.f : parent.height;
+            background: root.fr.c0;
+            opacity: 0.9;
+        }
+
+        // Zone markers
+        for z in root.st.zones: Rectangle {
+            property <float> zf: clamp(((z.from > root.st.min ? z.from : z.to) - root.st.min) / max(0.0001, root.st.max - root.st.min), 0, 1);
+            x: root.st.vertical ? 0 : parent.width * self.zf - 1px;
+            y: root.st.vertical ? parent.height * (1 - self.zf) - 1px : 0;
+            width: root.st.vertical ? parent.width : 2px;
+            height: root.st.vertical ? 2px : parent.height;
+            background: z.color;
+            opacity: 0.8;
+        }
+    }
+
+    if !root.st.vertical: Text {
+        x: root.pad * 1.5;
+        height: root.height;
+        vertical-alignment: center;
+        text: root.st.label;
+        color: root.st.ink;
+        font-size: root.height * 0.5 * root.st.font-scale;
+        font-weight: 700;
+    }
+    if !root.st.vertical && root.st.show-value: Text {
+        x: root.width - self.width - root.pad * 1.5;
+        height: root.height;
+        vertical-alignment: center;
+        text: root.fr.t0 + (root.st.unit == "" ? "" : " " + root.st.unit);
+        color: root.st.ink;
+        font-size: root.height * 0.5 * root.st.font-scale;
+        font-weight: 600;
+    }
+    if root.st.vertical: Text {
+        y: root.height - self.height - root.pad;
+        width: root.width;
+        horizontal-alignment: center;
+        text: root.st.label;
+        color: root.st.ink;
+        font-size: root.width * 0.26 * root.st.font-scale;
+        font-weight: 700;
+    }
+    if root.st.vertical && root.st.show-value: Text {
+        y: root.pad;
+        width: root.width;
+        horizontal-alignment: center;
+        text: root.fr.t0;
+        color: root.st.ink;
+        font-size: root.width * 0.3 * root.st.font-scale;
+        font-weight: 600;
+    }
+}
+
+// ---------------------------------------------------------------- readout
+export component ReadoutW inherits Base {
+    property <bool> has-label: root.st.label != "";
+    property <length> label-h: self.has-label ? root.height * 0.28 : 0;
+    property <TextHorizontalAlignment> ha: root.st.align == 0 ? TextHorizontalAlignment.left : root.st.align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.center;
+
+    if root.has-label: Text {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.label-h;
+        horizontal-alignment: root.ha;
+        text: root.st.label;
+        color: root.st.muted;
+        font-size: root.label-h * 0.8;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+    HorizontalLayout {
+        x: 0;
+        width: root.width;
+        y: root.label-h;
+        height: root.height - root.label-h;
+        alignment: root.st.align == 0 ? LayoutAlignment.start : root.st.align == 2 ? LayoutAlignment.end : LayoutAlignment.center;
+        spacing: root.height * 0.05;
+        Text {
+            vertical-alignment: center;
+            text: root.fr.t0;
+            color: root.fr.c0;
+            font-size: (root.height - root.label-h) * 0.72 * root.st.font-scale;
+            font-weight: 700;
+        }
+        if root.st.unit != "": Text {
+            vertical-alignment: center;
+            text: root.st.unit;
+            color: root.st.muted;
+            font-size: (root.height - root.label-h) * 0.3 * root.st.font-scale;
+        }
+    }
+}
+
+// ---------------------------------------------------------------- gear
+export component GearW inherits Base {
+    opacity: 1;
+    Rectangle {
+        border-radius: min(root.width, root.height) * 0.12;
+        background: root.fr.on ? root.st.accent.transparentize(75%) : transparent;
+        border-width: root.fr.on ? 3px : 0;
+        border-color: root.st.accent;
+    }
+    Text {
+        width: root.width;
+        height: root.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.fr.t0;
+        color: root.fr.on ? root.st.accent : root.st.ink;
+        font-size: min(root.width, root.height) * 0.85 * root.st.font-scale;
+        font-weight: 800;
+    }
+}
+
+// ---------------------------------------------------------------- shift lights
+export component ShiftLightsW inherits Base {
+    property <int> n: root.st.segments.length;
+    property <length> cell: root.width / max(1, self.n);
+    property <length> dot: min(self.cell * 0.78, root.height * 0.9);
+    property <int> lit: round(root.fr.v0 * self.n);
+    for c[i] in root.st.segments: Rectangle {
+        property <bool> on: i < root.lit;
+        x: root.cell * i + (root.cell - root.dot) / 2;
+        y: (root.height - root.dot) / 2;
+        width: root.dot;
+        height: root.dot;
+        border-radius: root.dot / 2;
+        background: self.on ? (root.fr.on ? root.st.color : c) : c.transparentize(88%);
+        border-width: 1px;
+        border-color: c.transparentize(60%);
+        drop-shadow-blur: self.on ? root.dot * 0.4 : 0;
+        drop-shadow-color: self.on ? (root.fr.on ? root.st.color : c) : transparent;
+    }
+}
+
+// ---------------------------------------------------------------- lamp
+export component LampW inherits Base {
+    opacity: 1;
+    Rectangle {
+        border-radius: min(root.width, root.height) * 0.22;
+        background: root.fr.on ? root.st.color.transparentize(80%) : root.st.face.transparentize(30%);
+        border-width: 1.5px;
+        border-color: root.fr.on ? root.st.color : root.st.edge;
+        drop-shadow-blur: root.fr.on ? root.height * 0.35 : 0;
+        drop-shadow-color: root.fr.on ? root.st.color.transparentize(40%) : transparent;
+    }
+    Text {
+        width: root.width;
+        height: root.height;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        text: root.st.icon;
+        color: root.fr.on ? root.st.color : root.st.muted.transparentize(55%);
+        font-size: root.height * 0.5 * root.st.font-scale;
+        font-weight: 800;
+    }
+}
+
+// ---------------------------------------------------------------- tyre quad
+component Tyre inherits Rectangle {
+    in property <string> text;
+    in property <color> tint;
+    in property <color> ink;
+    in property <float> font-scale;
+    border-radius: min(self.width, self.height) * 0.22;
+    background: self.tint.transparentize(78%);
+    border-width: 3px;
+    border-color: self.tint;
+    Text {
+        text: root.text;
+        color: root.ink;
+        font-size: min(root.width, root.height) * 0.3 * root.font-scale;
+        font-weight: 700;
+    }
+}
+
+export component TyreQuadW inherits Base {
+    property <length> label-h: root.st.label != "" ? root.height * 0.12 : 0;
+    property <length> gap: root.width * 0.06;
+    property <length> tw: (root.width - self.gap) / 2;
+    property <length> th: (root.height - self.label-h - self.gap) / 2;
+    if root.st.label != "": Text {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.label-h;
+        horizontal-alignment: center;
+        text: root.st.label;
+        color: root.st.muted;
+        font-size: root.label-h * 0.75;
+        font-weight: 700;
+    }
+    Tyre { x: 0; y: root.label-h; width: root.tw; height: root.th; text: root.fr.t0; tint: root.fr.c0; ink: root.st.ink; font-scale: root.st.font-scale; }
+    Tyre { x: root.tw + root.gap; y: root.label-h; width: root.tw; height: root.th; text: root.fr.t1; tint: root.fr.c1; ink: root.st.ink; font-scale: root.st.font-scale; }
+    Tyre { x: 0; y: root.label-h + root.th + root.gap; width: root.tw; height: root.th; text: root.fr.t2; tint: root.fr.c2; ink: root.st.ink; font-scale: root.st.font-scale; }
+    Tyre { x: root.tw + root.gap; y: root.label-h + root.th + root.gap; width: root.tw; height: root.th; text: root.fr.t3; tint: root.fr.c3; ink: root.st.ink; font-scale: root.st.font-scale; }
+}
+
+// ---------------------------------------------------------------- g meter
+export component GMeterW inherits Base {
+    property <length> side: min(self.width, self.height);
+    property <length> r: self.side / 2;
+    Rectangle {
+        width: root.side;
+        height: root.side;
+        border-radius: root.r;
+        background: root.st.face;
+        border-width: 2px;
+        border-color: root.st.edge;
+        // 1 g ring
+        Rectangle {
+            width: root.side * min(1, 1 / root.st.max-g);
+            height: self.width;
+            border-radius: self.width / 2;
+            border-width: 1px;
+            border-color: root.st.muted.transparentize(40%);
+        }
+        Rectangle { width: 1px; height: 100%; background: root.st.edge; }
+        Rectangle { height: 1px; width: 100%; background: root.st.edge; }
+        Rectangle {
+            property <float> gx: clamp(root.fr.v0 / root.st.max-g, -1, 1);
+            property <float> gy: clamp(root.fr.v1 / root.st.max-g, -1, 1);
+            property <length> d: root.side * 0.09;
+            x: root.r + root.r * 0.92 * self.gx - self.d / 2;
+            y: root.r - root.r * 0.92 * self.gy - self.d / 2;
+            width: self.d;
+            height: self.d;
+            border-radius: self.d / 2;
+            background: root.st.accent;
+            drop-shadow-blur: self.d * 0.6;
+            drop-shadow-color: root.st.accent;
+        }
+        Text {
+            y: parent.height * 0.82;
+            text: root.fr.t0;
+            color: root.st.ink;
+            font-size: root.side * 0.075 * root.st.font-scale;
+            font-weight: 600;
+        }
+    }
+}
+
+// ---------------------------------------------------------------- pedals
+export component PedalsW inherits Base {
+    property <int> n: root.st.segments.length;
+    property <bool> labels: root.st.names.length > 0;
+    property <length> label-h: self.labels ? root.height * 0.1 : 0;
+    property <length> cell: root.width / max(1, self.n);
+    property <length> bar-w: self.cell * 0.62;
+    for c[i] in root.st.segments: Rectangle {
+        property <float> v: i == 0 ? root.fr.v0 : i == 1 ? root.fr.v1 : i == 2 ? root.fr.v2 : root.fr.v3;
+        x: root.cell * i + (root.cell - root.bar-w) / 2;
+        width: root.bar-w;
+        height: root.height;
+        Rectangle {
+            y: 0;
+            height: root.height - root.label-h - 4px;
+            border-radius: root.bar-w * 0.15;
+            background: root.st.face;
+            border-width: 1px;
+            border-color: root.st.edge;
+            clip: true;
+            Rectangle {
+                y: parent.height * (1 - clamp(v, 0, 1));
+                height: parent.height * clamp(v, 0, 1);
+                background: c;
+            }
+        }
+        if root.labels: Text {
+            x: -(root.cell - root.bar-w) / 2;
+            y: root.height - root.label-h;
+            height: root.label-h;
+            width: root.cell;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.st.names[i];
+            color: root.st.muted;
+            font-size: root.label-h * 0.62 * root.st.font-scale;
+            font-weight: 700;
+        }
+    }
+}
+
+// ---------------------------------------------------------------- lap timer
+export component LapTimerW inherits Base {
+    property <length> u: root.height / 10;
+    VerticalLayout {
+        alignment: start;
+        spacing: root.u * 0.25;
+        Text { text: root.fr.t3; color: root.st.muted; font-size: root.u * 0.95 * root.st.font-scale; font-weight: 700; }
+        Text { text: root.fr.t0; color: root.st.ink; font-size: root.u * 2.1 * root.st.font-scale; font-weight: 700; }
+        if root.st.show-last: HorizontalLayout {
+            spacing: root.u * 0.4;
+            Text { text: "LAST"; color: root.st.muted; vertical-alignment: center; font-size: root.u * 0.8 * root.st.font-scale; font-weight: 700; min-width: root.u * 3; }
+            Text { text: root.fr.t1; color: root.st.ink; font-size: root.u * 1.4 * root.st.font-scale; font-weight: 600; }
+        }
+        if root.st.show-best: HorizontalLayout {
+            spacing: root.u * 0.4;
+            Text { text: "BEST"; color: root.st.muted; vertical-alignment: center; font-size: root.u * 0.8 * root.st.font-scale; font-weight: 700; min-width: root.u * 3; }
+            Text { text: root.fr.t2; color: root.st.accent; font-size: root.u * 1.4 * root.st.font-scale; font-weight: 600; }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- label
+export component LabelW inherits Base {
+    opacity: 1;
+    Text {
+        width: root.width;
+        height: root.height;
+        vertical-alignment: center;
+        horizontal-alignment: root.st.align == 0 ? TextHorizontalAlignment.left : root.st.align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.center;
+        text: root.fr.t0;
+        color: root.fr.c0;
+        font-size: root.height * 0.62 * root.st.font-scale;
+        font-weight: 600;
+    }
+}
+
+// ---------------------------------------------------------------- image
+export component ImageW inherits Base {
+    opacity: 1;
+    Image {
+        width: root.width;
+        height: root.height;
+        source: root.st.image;
+        image-fit: root.st.fit == 1 ? ImageFit.cover : root.st.fit == 2 ? ImageFit.fill : ImageFit.contain;
+    }
+}

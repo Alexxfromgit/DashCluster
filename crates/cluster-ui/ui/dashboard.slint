@@ -1,0 +1,63 @@
+import { WType, WZone, WStatic, WFrame, AnalogGaugeW, BarGaugeW, ReadoutW, GearW, ShiftLightsW, LampW, TyreQuadW, GMeterW, PedalsW, LapTimerW, LabelW, ImageW } from "widgets.slint";
+export { WType, WZone, WStatic, WFrame }
+
+// Renders a dashboard: widgets placed in canvas units, scaled to fit and centered.
+export component Dashboard inherits Rectangle {
+    in property <float> canvas-w: 1600;
+    in property <float> canvas-h: 600;
+    in property <[WStatic]> statics;
+    in property <[WFrame]> frames;
+    in property <color> bg: #05070a;
+    in property <color> bg2: #05070a;
+    in property <float> bg-angle: 180;
+    in property <image> bg-image;
+    // Dims everything when the data feed is stale.
+    in property <bool> stale;
+
+    // Logical pixels per canvas unit, and the letterbox offset.
+    out property <length> unit: min(self.width / self.canvas-w, self.height / self.canvas-h);
+    out property <length> ox: (self.width - self.canvas-w * self.unit) / 2;
+    out property <length> oy: (self.height - self.canvas-h * self.unit) / 2;
+
+    background: #000;
+    clip: true;
+
+    Rectangle {
+        x: root.ox;
+        y: root.oy;
+        width: root.canvas-w * root.unit;
+        height: root.canvas-h * root.unit;
+        background: @linear-gradient(root.bg-angle * 1deg, root.bg 0%, root.bg2 100%);
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.bg-image;
+            image-fit: cover;
+        }
+    }
+
+    Rectangle {
+        opacity: root.stale ? 0.35 : 1;
+        animate opacity { duration: 250ms; }
+
+        for st[i] in root.statics: Rectangle {
+            x: root.ox + st.x * root.unit;
+            y: root.oy + st.y * root.unit;
+            width: st.w * root.unit;
+            height: st.h * root.unit;
+
+            if st.kind == WType.analog-gauge: AnalogGaugeW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.bar-gauge: BarGaugeW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.readout: ReadoutW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.gear: GearW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.shift-lights: ShiftLightsW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.lamp: LampW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.tyre-quad: TyreQuadW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.g-meter: GMeterW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.pedals: PedalsW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.lap-timer: LapTimerW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.label: LabelW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.image: ImageW { st: st; fr: root.frames[i]; }
+        }
+    }
+}

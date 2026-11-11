@@ -1,0 +1,47 @@
+// Grand Tourer — two classic dials with a calm amber-on-navy palette.
+// Coordinates are in canvas units; the canvas scales to fit any screen.
+{
+  name: "Grand Tourer",
+  version: 1,
+  description: "Twin dials, center gear and vitals. Good on a wide second screen.",
+  canvas: { width: 1600, height: 600 },
+  theme: {
+    ink: "#eef2f6", muted: "#7c8796", accent: "#ffae3d", danger: "#ff4d3d",
+    warn: "#ffc23d", ok: "#3ddc84", info: "#4ea8ff", face: "#0b1220", edge: "#1f2a3a",
+  },
+  background: { color: "#04070d", gradient_to: "#0b1426", gradient_angle: 180 },
+  widgets: [
+    { id: "tach", type: "analog_gauge", x: 30, y: 30, w: 540, h: 540,
+      bind: { signal: "rpm", scale: 0.001, smoothing: 0.04 },
+      max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 },
+      zones: [ { from: { signal: "rpm_max", scale: 0.00092 }, color: "danger" } ],
+      caption: "×1000 r/min",
+      center: { bind: "rpm", format: { unit: "" } } },
+
+    { id: "speedo", type: "analog_gauge", x: 1030, y: 30, w: 540, h: 540,
+      bind: { signal: "speed", smoothing: 0.08 }, max: 280, major_ticks: 7, minor_ticks: 4 },
+
+    { id: "blink_l", type: "lamp", x: 620, y: 40, w: 56, h: 44, bind: "blinker_left", icon: "◀", color: "ok" },
+    { id: "blink_r", type: "lamp", x: 924, y: 40, w: 56, h: 44, bind: "blinker_right", icon: "▶", color: "ok" },
+    { id: "clock", type: "label", x: 690, y: 44, w: 220, h: 36, text: "{race_time}", style: { ink: "muted" } },
+
+    { id: "gear", type: "gear", x: 700, y: 110, w: 200, h: 200,
+      shift_at: { signal: "rpm_max", scale: 0.92 }, style: { accent: "danger" } },
+
+    { id: "oil", type: "readout", x: 630, y: 320, w: 160, h: 60, label: "OIL",
+      bind: "oil_temp", zones: [ { from: 125, color: "danger" } ] },
+    { id: "boost", type: "readout", x: 810, y: 320, w: 160, h: 60, label: "BOOST",
+      bind: "boost", format: { decimals: 2 } },
+
+    { id: "water", type: "bar_gauge", x: 630, y: 400, w: 340, h: 34, label: "WATER",
+      bind: "coolant_temp", min: 40, max: 130, format: { decimals: 0 },
+      zones: [ { to: 70, color: "info" }, { from: 110, color: "danger" } ] },
+    { id: "fuel", type: "bar_gauge", x: 630, y: 446, w: 340, h: 34, label: "FUEL",
+      bind: "fuel", min: 0, max: 100, zones: [ { to: 12, color: "warn" } ] },
+
+    { id: "abs", type: "lamp", x: 630, y: 510, w: 76, h: 44, bind: "abs_active", icon: "ABS" },
+    { id: "tc", type: "lamp", x: 718, y: 510, w: 76, h: 44, bind: "tc_active", icon: "TC" },
+    { id: "eng", type: "lamp", x: 806, y: 510, w: 76, h: 44, bind: "engine_warning", icon: "ENG", color: "danger" },
+    { id: "lights", type: "lamp", x: 894, y: 510, w: 76, h: 44, bind: "lights", icon: "BEAM", color: "info" },
+  ],
+}

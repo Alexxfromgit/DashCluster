@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 cluster-core.workspace = true
+cluster-layout.workspace = true
 slint.workspace = true
 log.workspace = true
 png = { version = "0.18", optional = true }

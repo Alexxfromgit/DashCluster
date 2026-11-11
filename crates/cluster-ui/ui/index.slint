@@ -1,46 +1,94 @@
-import { AnalogGauge } from "gauge.slint";
+import { Dashboard, WType, WZone, WStatic, WFrame } from "dashboard.slint";
+export { WType, WZone, WStatic, WFrame }
 
 export component MainWindow inherits Window {
-    title: "DashCluster";
-    preferred-width: 960px;
+    title: "DashCluster — " + root.dashboard-name;
+    preferred-width: 1280px;
     preferred-height: 540px;
-    background: #05070a;
+    min-width: 320px;
+    min-height: 200px;
+    background: #000;
 
-    in property <float> rpm;
-    in property <float> rpm-max: 8;
-    in property <float> rpm-red: 7;
-    in property <float> speed;
-    in property <string> speed-text;
-    in property <string> speed-unit;
-    in property <string> gear-text;
+    in property <string> dashboard-name;
+    in-out property <float> canvas-w <=> dash.canvas-w;
+    in-out property <float> canvas-h <=> dash.canvas-h;
+    in property <[WStatic]> statics <=> dash.statics;
+    in property <[WFrame]> frames <=> dash.frames;
+    in property <color> bg <=> dash.bg;
+    in property <color> bg2 <=> dash.bg2;
+    in property <float> bg-angle <=> dash.bg-angle;
+    in property <image> bg-image <=> dash.bg-image;
+    in property <bool> stale <=> dash.stale;
     in property <string> status-text;
+    in property <string> error-text;
+    in property <string> toast-text;
+    in property <bool> show-status: true;
 
-    HorizontalLayout {
-        padding: 24px;
-        spacing: 24px;
-        AnalogGauge {
-            value: root.rpm;
-            max-value: root.rpm-max;
-            redline: root.rpm-red;
-            caption: "×1000 rpm";
-            value-text: root.gear-text;
+    callback next-dashboard();
+    callback previous-dashboard();
+    callback toggle-units();
+    callback toggle-fullscreen();
+    callback toggle-status();
+
+    FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.RightArrow || e.text == Key.PageDown) { root.next-dashboard(); return accept; }
+            if (e.text == Key.LeftArrow || e.text == Key.PageUp) { root.previous-dashboard(); return accept; }
+            if (e.text == "u" || e.text == "U") { root.toggle-units(); return accept; }
+            if (e.text == "f" || e.text == "F" || e.text == Key.F11) { root.toggle-fullscreen(); return accept; }
+            if (e.text == "s" || e.text == "S") { root.toggle-status(); return accept; }
+            reject
         }
-        AnalogGauge {
-            value: root.speed;
-            max-value: 280;
-            redline: 1000;
-            major-ticks: 7;
-            minor-ticks: 4;
-            caption: root.speed-unit;
-            value-text: root.speed-text;
-            accent: #2f81f7;
+
+        dash := Dashboard { }
+    }
+
+    if root.stale && root.status-text != "": Rectangle {
+        y: root.height / 2 - 30px;
+        height: 60px;
+        width: min(root.width - 40px, 560px);
+        border-radius: 12px;
+        background: #000000cc;
+        border-width: 1px;
+        border-color: #ffffff33;
+        Text { text: "Waiting for telemetry…"; color: #fff; font-size: 20px; font-weight: 600; }
+    }
+
+    if root.error-text != "": Rectangle {
+        x: 12px;
+        y: 12px;
+        width: root.width - 24px;
+        height: err.preferred-height + 20px;
+        border-radius: 8px;
+        background: #3b0d0ce6;
+        border-width: 1px;
+        border-color: #ff6b5e;
+        err := Text {
+            x: 12px;
+            width: parent.width - 24px;
+            text: root.error-text;
+            color: #ffd7d3;
+            font-size: 13px;
+            wrap: word-wrap;
         }
     }
-    Text {
-        x: 12px;
-        y: root.height - self.height - 8px;
+
+    if root.toast-text != "": Rectangle {
+        y: root.height - 80px;
+        width: toast.preferred-width + 32px;
+        height: 40px;
+        border-radius: 20px;
+        background: #000000cc;
+        border-width: 1px;
+        border-color: #ffffff2a;
+        toast := Text { text: root.toast-text; color: #fff; font-size: 15px; font-weight: 600; }
+    }
+
+    if root.show-status: Text {
+        x: 10px;
+        y: root.height - self.height - 6px;
         text: root.status-text;
         color: #6e7681;
-        font-size: 12px;
+        font-size: 11px;
     }
 }

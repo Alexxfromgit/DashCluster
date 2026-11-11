@@ -1,0 +1,28 @@
+// Phone (portrait) — a compact layout for a phone mounted next to the wheel.
+{
+  name: "Phone portrait",
+  version: 1,
+  description: "Tall layout for phones: shift lights, gear, speed, laps.",
+  canvas: { width: 720, height: 1280 },
+  theme: {
+    ink: "#f5f7fa", muted: "#6b7280", accent: "#ff7a1a", danger: "#ff3b30",
+    warn: "#ffb020", ok: "#2fd16b", info: "#2f81f7", face: "#0d1117", edge: "#30363d",
+  },
+  background: { color: "#000000" },
+  widgets: [
+    { id: "shift", type: "shift_lights", x: 30, y: 30, w: 660, h: 60, segments: 10,
+      start: { signal: "rpm_max", scale: 0.72 }, limit: { signal: "rpm_max", scale: 0.95 } },
+    { id: "rpm_bar", type: "bar_gauge", x: 30, y: 110, w: 660, h: 30, bind: "rpm",
+      max: { signal: "rpm_max", fallback: 8000 }, show_value: false,
+      zones: [ { from: { signal: "rpm_max", scale: 0.92 }, color: "danger" } ] },
+    { id: "gear", type: "gear", x: 160, y: 170, w: 400, h: 400, shift_at: { signal: "rpm_max", scale: 0.95 },
+      style: { accent: "danger" } },
+    { id: "speed", type: "readout", x: 110, y: 590, w: 500, h: 170, bind: "speed", style: { font_scale: 1.2 } },
+    { id: "lap", type: "lap_timer", x: 30, y: 790, w: 400, h: 300 },
+    { id: "pedals", type: "pedals", x: 470, y: 790, w: 220, h: 300 },
+    { id: "fuel", type: "bar_gauge", x: 30, y: 1120, w: 660, h: 50, label: "FUEL", bind: "fuel", max: 100,
+      zones: [ { to: 10, color: "danger" } ] },
+    { id: "water", type: "bar_gauge", x: 30, y: 1190, w: 660, h: 50, label: "WATER", bind: "coolant_temp",
+      min: 40, max: 130, zones: [ { from: 110, color: "danger" } ] },
+  ],
+}

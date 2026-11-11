@@ -123,6 +123,14 @@ impl UnitPrefs {
         }
     }
 
+    /// Inverse of [`UnitPrefs::convert`]: display unit → base unit. All conversions
+    /// are affine, so this is exact.
+    pub fn to_base(&self, q: Quantity, display: f32) -> f32 {
+        let b = self.convert(q, 0.0);
+        let a = self.convert(q, 1.0) - b;
+        (display - b) / a
+    }
+
     /// Unit label shown next to a converted value ("" for unitless quantities).
     pub fn unit_label(&self, q: Quantity) -> &'static str {
         match q {
@@ -214,6 +222,19 @@ mod tests {
         ));
         assert!(close(m.convert(Quantity::Ratio, 0.42), 42.0));
         assert!(close(i.convert(Quantity::Distance, 1609.344), 1.0));
+    }
+
+    #[test]
+    fn to_base_inverts_convert() {
+        let i = UnitPrefs::imperial();
+        for q in [
+            Quantity::Speed,
+            Quantity::Temperature,
+            Quantity::Pressure,
+            Quantity::Ratio,
+        ] {
+            assert!(close(i.to_base(q, i.convert(q, 12.5)), 12.5));
+        }
     }
 
     #[test]

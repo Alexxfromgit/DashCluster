@@ -1,0 +1,17 @@
+[package]
+name = "cluster-layout"
+description = "Dashboard layout format, validation, and per-frame widget evaluation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+cluster-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+json5.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

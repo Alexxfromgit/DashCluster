@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 cluster-core.workspace = true
+cluster-layout.workspace = true
+notify.workspace = true
 cluster-ui = { workspace = true, features = ["offscreen"] }
 source-demo.workspace = true
 slint.workspace = true

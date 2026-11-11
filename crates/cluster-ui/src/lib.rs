@@ -2,5 +2,9 @@
 
 slint::include_modules!();
 
+pub mod view;
+
 #[cfg(feature = "offscreen")]
 pub mod offscreen;
+
+pub use view::DashboardView;

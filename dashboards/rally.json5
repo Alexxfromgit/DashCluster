@@ -1,0 +1,33 @@
+// Rally — one large sweeping tach with speed in the middle.
+{
+  name: "Rally",
+  version: 1,
+  description: "Big wrap-around tach, boost and g-forces.",
+  canvas: { width: 1600, height: 600 },
+  theme: {
+    ink: "#ffffff", muted: "#8aa0b8", accent: "#00c2ff", danger: "#ff3860",
+    warn: "#ffdd57", ok: "#48c774", info: "#00c2ff", face: "#071526", edge: "#163252",
+  },
+  background: { color: "#020a14", gradient_to: "#06213d", gradient_angle: 135 },
+  widgets: [
+    { id: "tach", type: "analog_gauge", x: 480, y: 10, w: 640, h: 640,
+      bind: { signal: "rpm", scale: 0.001, smoothing: 0.03 },
+      max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 },
+      start_angle: -120, sweep: 240, minor_ticks: 5,
+      zones: [ { from: { signal: "rpm_max", scale: 0.0009 }, color: "danger" } ],
+      center: { bind: "speed" } },
+    { id: "gear", type: "gear", x: 1160, y: 470, w: 180, h: 120, shift_at: { signal: "rpm_max", scale: 0.93 } },
+    { id: "speed_unit", type: "label", x: 720, y: 520, w: 160, h: 40, text: "×1000 r/min", style: { ink: "muted" } },
+
+    { id: "boost", type: "bar_gauge", x: 60, y: 120, w: 60, h: 400, vertical: true, label: "BOOST",
+      bind: "boost", min: 0, max: 1.5, format: { decimals: 1 } },
+    { id: "g", type: "g_meter", x: 160, y: 160, w: 300, h: 300, max_g: 1.5 },
+    { id: "pedals", type: "pedals", x: 1160, y: 140, w: 180, h: 320, signals: ["throttle", "brake", "handbrake"],
+      colors: ["ok", "danger", "warn"] },
+    { id: "lap", type: "lap_timer", x: 1360, y: 140, w: 220, h: 200, show_best: false },
+    { id: "water", type: "readout", x: 1360, y: 360, w: 220, h: 80, label: "WATER", bind: "coolant_temp",
+      zones: [ { from: 110, color: "danger" } ] },
+    { id: "title", type: "label", x: 40, y: 30, w: 400, h: 50, text: "STAGE  {lap_number}", align: "left",
+      style: { font_scale: 0.8 } },
+  ],
+}

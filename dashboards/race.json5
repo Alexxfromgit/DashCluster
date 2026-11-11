@@ -1,0 +1,42 @@
+// Race — information-dense, high-contrast layout for track driving.
+{
+  name: "Race",
+  version: 1,
+  description: "Shift lights, big gear, lap timing, tyres and inputs.",
+  canvas: { width: 1600, height: 600 },
+  theme: {
+    ink: "#f5f7fa", muted: "#6b7280", accent: "#c6ff3d", danger: "#ff2e4d",
+    warn: "#ffcc00", ok: "#3dff8b", info: "#3d9bff", face: "#0a0a0a", edge: "#262626",
+  },
+  background: { color: "#000000" },
+  widgets: [
+    { id: "shift", type: "shift_lights", x: 340, y: 18, w: 920, h: 52, segments: 15,
+      start: { signal: "rpm_max", scale: 0.72 }, limit: { signal: "rpm_max", scale: 0.95 } },
+
+    { id: "rpm_bar", type: "bar_gauge", x: 340, y: 84, w: 920, h: 26,
+      bind: "rpm", max: { signal: "rpm_max", fallback: 8000 }, show_value: false,
+      zones: [ { from: { signal: "rpm_max", scale: 0.92 }, color: "danger" } ] },
+
+    { id: "gear", type: "gear", x: 650, y: 130, w: 300, h: 300,
+      shift_at: { signal: "rpm_max", scale: 0.95 }, style: { accent: "danger" } },
+    { id: "speed", type: "readout", x: 650, y: 440, w: 300, h: 120, bind: "speed",
+      style: { font_scale: 1.3 } },
+
+    { id: "rpm", type: "readout", x: 380, y: 140, w: 240, h: 90, label: "RPM", bind: "rpm", format: { unit: "" } },
+    { id: "lap", type: "lap_timer", x: 30, y: 130, w: 330, h: 300 },
+    { id: "pos", type: "label", x: 30, y: 30, w: 290, h: 60, text: "P{race_position}  ·  {distance:1} km", align: "left" },
+
+    { id: "pedals", type: "pedals", x: 400, y: 260, w: 220, h: 300 },
+
+    { id: "tyres", type: "tyre_quad", x: 980, y: 140, w: 280, h: 280, label: "TYRE °C",
+      zones: [ { to: 65, color: "info" }, { from: 65, to: 100, color: "ok" }, { from: 100, color: "danger" } ] },
+    { id: "g", type: "g_meter", x: 1290, y: 140, w: 280, h: 280, max_g: 2 },
+
+    { id: "fuel", type: "bar_gauge", x: 980, y: 450, w: 590, h: 40, label: "FUEL", bind: "fuel", max: 100,
+      zones: [ { to: 10, color: "danger" } ] },
+    { id: "water", type: "bar_gauge", x: 980, y: 504, w: 590, h: 40, label: "WATER", bind: "coolant_temp",
+      min: 40, max: 130, zones: [ { from: 110, color: "danger" } ] },
+    { id: "abs", type: "lamp", x: 1290, y: 30, w: 130, h: 60, bind: "abs_active", icon: "ABS" },
+    { id: "tc", type: "lamp", x: 1440, y: 30, w: 130, h: 60, bind: "tc_active", icon: "TC" },
+  ],
+}
