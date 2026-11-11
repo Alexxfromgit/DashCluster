@@ -20,6 +20,11 @@ source-forza.workspace = true
 source-net.workspace = true
 cluster-net.workspace = true
 qrcode.workspace = true
+serde_json.workspace = true
+json5.workspace = true
+rfd = "0.18"
+directories = "6"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 slint.workspace = true
 anyhow.workspace = true
 log.workspace = true

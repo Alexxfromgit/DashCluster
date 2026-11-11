@@ -1,18 +1,19 @@
+mod app;
+mod editor;
 mod library;
 mod sources;
 
+use app::{App, bind_view};
 use clap::{Parser, Subcommand, ValueEnum};
 use cluster_core::{SignalBus, SignalId, SourceState, UnitPrefs};
 use cluster_ui::{DashboardView, MainWindow};
 use library::Library;
-use notify::Watcher;
 use slint::ComponentHandle;
 use sources::{SourceConfig, SourceKind, Sources};
 use std::cell::RefCell;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 #[derive(Parser)]
@@ -104,6 +105,12 @@ enum Command {
         /// simulating the demo car (end-to-end check).
         #[arg(long)]
         live: bool,
+        /// Render the editor UI with this widget selected (by id), for checking the editor.
+        #[arg(long, value_name = "WIDGET_ID")]
+        edit: Option<String>,
+        /// Image height (default: follows the dashboard's aspect ratio).
+        #[arg(long)]
+        height: Option<u32>,
     },
 }
 
@@ -126,10 +133,6 @@ fn source_config(cli: &Cli) -> SourceConfig {
         replay_speed: cli.replay_speed,
         own_hub_port: (!cli.no_hub).then_some(cli.hub_port),
     }
-}
-
-fn units_name(u: UnitPrefs) -> &'static str {
-    if u == UnitPrefs::default() { "metric" } else { "imperial" }
 }
 
 /// Renders a QR code for `text` as an image.
@@ -160,17 +163,25 @@ fn library(cli: &Cli) -> anyhow::Result<Library> {
     let mut lib = Library::new(&cli.dashboards);
     if let Some(name) = &cli.dashboard {
         anyhow::ensure!(lib.select(name), "no dashboard named {name:?}");
-    } else if !cli.dashboards.is_empty() {
-        lib.current = cluster_layout::BUILTIN.len().min(lib.entries.len() - 1);
+    } else if let Some(i) = lib.first_extra() {
+        lib.current = i;
     }
     Ok(lib)
 }
 
-fn snapshot(cli: &Cli, out: &std::path::Path, seconds: f32, width: u32, live: bool) -> anyhow::Result<()> {
+fn snapshot(
+    cli: &Cli,
+    out: &std::path::Path,
+    seconds: f32,
+    width: u32,
+    live: bool,
+    edit: Option<&str>,
+    height: Option<u32>,
+) -> anyhow::Result<()> {
     let lib = library(cli)?;
     let (compiled, base) = lib.current().load()?;
     let (cw, ch) = (compiled.layout.canvas.width, compiled.layout.canvas.height);
-    let height = (width as f32 * ch / cw).round() as u32;
+    let height = height.unwrap_or((width as f32 * ch / cw).round() as u32);
     let off = cluster_ui::offscreen::install(width, height)?;
     let ui = MainWindow::new()?;
     let mut view = DashboardView::new(compiled, cli.units.prefs(), base);
@@ -197,122 +208,32 @@ fn snapshot(cli: &Cli, out: &std::path::Path, seconds: f32, width: u32, live: bo
     view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
     ui.set_show_status(false);
+    if let Some(id) = edit {
+        let text = lib.current().text()?;
+        let doc = cluster_layout::edit::Doc::new(json5::from_str(&text)?);
+        let mut ed = editor::Editor::new(doc, None);
+        ed.selected = ed.doc.widgets().iter().position(|w| w["id"] == id).into_iter().collect();
+        let order = view.order().to_vec();
+        let palette = view.compiled().palette;
+        let sel: Vec<bool> = order.iter().map(|i| ed.selected.contains(i)).collect();
+        ui.set_selected(slint::ModelRc::new(slint::VecModel::from(sel)));
+        ui.set_props(slint::ModelRc::new(slint::VecModel::from(ed.rows(&palette))));
+        ui.set_palette_items(slint::ModelRc::new(slint::VecModel::from(editor::palette_items())));
+        let (sw, names) = editor::theme_swatches(&palette);
+        ui.set_theme_swatches(slint::ModelRc::new(slint::VecModel::from(sw)));
+        ui.set_theme_names(slint::ModelRc::new(slint::VecModel::from(names)));
+        ui.set_selection_count(ed.selected.len() as i32);
+        ui.set_inspector_title(ed.inspector_title().into());
+        ui.set_editor_title(format!("{} — built-in", ed.name()).into());
+        ui.set_editor_message("Built-in dashboard — Save will make your own copy.".into());
+        ui.set_can_undo(true);
+        ui.set_dirty(true);
+        ui.set_edit_mode(true);
+    }
     ui.show()?;
     off.render_png(out)?;
     println!("wrote {} ({width}×{height})", out.display());
     Ok(())
-}
-
-/// Points the window at a view's models and canvas.
-fn bind_view(ui: &MainWindow, view: &mut DashboardView) {
-    let (w, h) = view.canvas();
-    ui.set_canvas_w(w);
-    ui.set_canvas_h(h);
-    ui.set_statics(view.statics_model());
-    ui.set_frames(view.frames_model());
-    let (c0, c1, angle, image) = view.background();
-    ui.set_bg(c0);
-    ui.set_bg2(c1);
-    ui.set_bg_angle(angle);
-    ui.set_bg_image(image);
-    ui.set_dashboard_name(view.name().into());
-}
-
-struct App {
-    ui: slint::Weak<MainWindow>,
-    lib: Library,
-    view: DashboardView,
-    units: UnitPrefs,
-    watcher: Option<notify::RecommendedWatcher>,
-    reload_rx: mpsc::Receiver<()>,
-    reload_tx: mpsc::Sender<()>,
-    pending_reload: Option<Instant>,
-    toast_until: Option<Instant>,
-    hub: Option<cluster_net::Hub>,
-}
-
-impl App {
-    /// Tells the hub which dashboards exist and which one is showing here.
-    fn publish_catalog(&self) {
-        let Some(hub) = &self.hub else { return };
-        let dashboards = self.lib.entries.iter().filter_map(|e| e.text().ok().map(|t| (e.label(), t))).collect();
-        hub.set_catalog(cluster_net::Catalog {
-            dashboards,
-            current: self.lib.current().label(),
-            units: units_name(self.units).into(),
-        });
-    }
-
-    fn ui(&self) -> MainWindow {
-        self.ui.upgrade().expect("window alive")
-    }
-
-    fn toast(&mut self, text: &str) {
-        self.ui().set_toast_text(text.into());
-        self.toast_until = Some(Instant::now() + Duration::from_millis(1500));
-    }
-
-    /// Loads the library's current entry. On error, keeps the old dashboard and shows
-    /// the problem; returns whether it loaded.
-    fn load_current(&mut self) -> bool {
-        let entry = self.lib.current().clone();
-        self.watch(entry.path().map(PathBuf::from));
-        match entry.load() {
-            Ok((compiled, base)) => {
-                self.view = DashboardView::new(compiled, self.units, base);
-                let ui = self.ui();
-                bind_view(&ui, &mut self.view);
-                ui.set_error_text("".into());
-                self.publish_catalog();
-                true
-            }
-            Err(e) => {
-                log::warn!("{e:#}");
-                self.ui().set_error_text(format!("{e:#}").into());
-                false
-            }
-        }
-    }
-
-    fn watch(&mut self, path: Option<PathBuf>) {
-        self.watcher = None;
-        let Some(path) = path else { return };
-        let tx = self.reload_tx.clone();
-        let target = path.clone();
-        let watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(ev) = res
-                && ev.paths.iter().any(|p| p.file_name() == target.file_name())
-                && !matches!(ev.kind, notify::EventKind::Access(_))
-            {
-                let _ = tx.send(());
-            }
-        });
-        match watcher {
-            Ok(mut w) => {
-                // Watch the folder: editors often save by replacing the file.
-                let dir = path.parent().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-                if let Err(e) = w.watch(&dir, notify::RecursiveMode::NonRecursive) {
-                    log::warn!("can't watch {}: {e}", dir.display());
-                }
-                self.watcher = Some(w);
-            }
-            Err(e) => log::warn!("file watching unavailable: {e}"),
-        }
-    }
-
-    fn poll_reload(&mut self) {
-        while self.reload_rx.try_recv().is_ok() {
-            self.pending_reload = Some(Instant::now());
-        }
-        // Debounce: editors write several events per save.
-        if self.pending_reload.is_some_and(|t| t.elapsed() > Duration::from_millis(150)) {
-            self.pending_reload = None;
-            if self.load_current() {
-                log::info!("reloaded {}", self.lib.current().label());
-                self.toast("Reloaded");
-            }
-        }
-    }
 }
 
 fn run(cli: &Cli) -> anyhow::Result<()> {
@@ -344,82 +265,97 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         ui.set_qr_url("Hub is off".into());
         ui.set_qr_detail("Start without --no-hub, or check that the port is free.".into());
     }
-    let (compiled, base) = cluster_layout::BUILTIN
-        .first()
-        .map(|(_, src)| (cluster_layout::Compiled::from_json5(src).expect("built-in dashboard"), None))
-        .expect("built-ins exist");
-    let units = cli.units.prefs();
-    let (reload_tx, reload_rx) = mpsc::channel();
-    let app = Rc::new(RefCell::new(App {
-        ui: ui.as_weak(),
-        lib,
-        view: DashboardView::new(compiled, units, base),
-        units,
-        watcher: None,
-        reload_rx,
-        reload_tx,
-        pending_reload: None,
-        toast_until: None,
-        hub,
-    }));
+    let app = Rc::new(RefCell::new(App::new(&ui, lib, cli.units.prefs(), hub)));
     app.borrow_mut().load_current();
 
-    let step = |delta: isize| {
-        let app = app.clone();
-        move || {
-            let mut a = app.borrow_mut();
-            a.lib.step(delta);
-            if a.load_current() {
-                let name = a.view.name().to_owned();
-                a.toast(&name);
-            }
-        }
-    };
-    ui.on_next_dashboard(step(1));
-    ui.on_previous_dashboard(step(-1));
+    // Small helper: run `f` on the app from a callback.
+    macro_rules! on {
+        ($setter:ident, |$a:ident $(, $arg:ident)*| $body:expr) => {{
+            let app = app.clone();
+            ui.$setter(move |$($arg),*| {
+                let mut guard = app.borrow_mut();
+                let $a = &mut *guard;
+                $body
+            });
+        }};
+    }
+
+    on!(on_next_dashboard, |a| a.step_dashboard(1));
+    on!(on_previous_dashboard, |a| a.step_dashboard(-1));
     {
-        let app = app.clone();
         let bus = bus.clone();
-        ui.on_toggle_units(move || {
-            let mut a = app.borrow_mut();
+        on!(on_toggle_units, |a| {
             a.units = if a.units == UnitPrefs::default() { UnitPrefs::imperial() } else { UnitPrefs::default() };
             let units = a.units;
             a.view.set_units(units, &bus.latest().snapshot);
             a.publish_catalog();
-            let label = if units == UnitPrefs::default() { "Units: metric" } else { "Units: imperial" };
-            a.toast(label);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        ui.on_toggle_qr(move || {
-            if let Some(ui) = weak.upgrade() {
-                ui.set_show_qr(!ui.get_show_qr());
-            }
+            a.toast(if units == UnitPrefs::default() { "Units: metric" } else { "Units: imperial" });
         });
     }
     {
         let sources = sources.clone();
-        let app = app.clone();
         let bus = bus.clone();
-        ui.on_toggle_demo(move || {
+        on!(on_toggle_demo, |a| {
             sources.borrow_mut().toggle_demo();
             let name = bus.status().source.clone();
-            app.borrow_mut().toast(&name);
+            a.toast(&name);
         });
     }
+    on!(on_toggle_qr, |a| {
+        let ui = a.ui();
+        ui.set_show_qr(!ui.get_show_qr());
+    });
+    on!(on_toggle_fullscreen, |a| {
+        let ui = a.ui();
+        let w = ui.window();
+        w.set_fullscreen(!w.is_fullscreen());
+    });
+    on!(on_toggle_status, |a| {
+        let ui = a.ui();
+        ui.set_show_status(!ui.get_show_status());
+    });
+
+    // Editor
+    on!(on_toggle_edit, |a| a.toggle_edit());
+    on!(on_editor_pointer_down, |a, x, y, additive, handle| a.with_editor(|e| e.pointer_down(x, y, additive, handle)));
+    on!(on_editor_pointer_move, |a, x, y| a.with_editor(|e| e.pointer_move(x, y)));
+    on!(on_editor_pointer_up, |a| a.with_editor(|e| e.pointer_up()));
+    on!(on_add_widget, |a, kind| a.with_editor(|e| e.add(&kind)));
+    on!(on_prop_changed, |a, key, value| a.with_editor(|e| e.set_prop(&key, &value)));
+    on!(on_undo, |a| a.with_editor(|e| e.undo()));
+    on!(on_redo, |a| a.with_editor(|e| e.redo()));
+    on!(on_delete_selected, |a| a.with_editor(|e| e.delete()));
+    on!(on_duplicate_selected, |a| a.with_editor(|e| e.duplicate()));
+    on!(on_clear_selection, |a| a.with_editor(|e| {
+        e.selected.clear();
+        editor::Change::Selection
+    }));
+    on!(on_nudge, |a, dx, dy| a.with_editor(|e| e.nudge(dx, dy)));
+    on!(on_restack, |a, d| a.with_editor(|e| e.restack(i64::from(d))));
+    on!(on_align, |a, how| a.with_editor(|e| e.align(&how)));
+    on!(on_toggle_snap, |a| a.with_editor(|e| {
+        e.snap = !e.snap;
+        editor::Change::None
+    }));
+    on!(on_save, |a| {
+        a.save(false);
+    });
+    on!(on_save_as, |a| {
+        a.save(true);
+    });
+    on!(on_new_dashboard, |a| a.new_dashboard());
+    on!(on_import_dashboard, |a| a.import());
+    on!(on_export_dashboard, |a| a.export());
+    on!(on_reveal_folder, |a| a.reveal_folder());
+    on!(on_pick_image, |a, key| a.pick_image(&key));
+
     {
-        let weak = ui.as_weak();
-        ui.on_toggle_fullscreen(move || {
-            if let Some(ui) = weak.upgrade() {
-                let w = ui.window();
-                w.set_fullscreen(!w.is_fullscreen());
-            }
-        });
-        let weak = ui.as_weak();
-        ui.on_toggle_status(move || {
-            if let Some(ui) = weak.upgrade() {
-                ui.set_show_status(!ui.get_show_status());
+        let app = app.clone();
+        ui.window().on_close_requested(move || {
+            if app.borrow_mut().exit_edit() {
+                slint::CloseRequestResponse::HideWindow
+            } else {
+                slint::CloseRequestResponse::KeepWindowShown
             }
         });
     }
@@ -439,6 +375,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             a.poll_reload();
             let frame = bus.latest();
             a.view.update(&frame.snapshot, dt);
+            a.last_snapshot = frame.snapshot.clone();
 
             if rate_at.elapsed() >= Duration::from_secs(1) {
                 let c = bus.publish_count();
@@ -458,7 +395,9 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
                 SourceState::Error(e) => format!("error: {e}"),
             };
             let paused = frame.snapshot.get(SignalId::RaceOn) == Some(0.0);
+            let editing = a.editor.is_some();
             let (title, detail) = match &st.state {
+                _ if editing => (String::new(), String::new()),
                 SourceState::Error(e) => ("Telemetry source stopped".to_owned(), e.clone()),
                 _ if stale => {
                     ("Waiting for telemetry…".to_owned(), format!("{}\nPress D for the demo car.", st.detail))
@@ -469,10 +408,10 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             let ui = a.ui();
             ui.set_overlay_title(title.into());
             ui.set_overlay_detail(detail.into());
-            ui.set_stale(stale || paused);
+            ui.set_stale(!editing && (stale || paused));
             ui.set_status_text(
                 format!(
-                    "{} · {} · {} · {}/{}{}  —  ←/→ dashboards · D demo · Q phone · U units · F fullscreen · S hide",
+                    "{} · {} · {} · {}/{}{}  —  ←/→ dashboards · E edit · D demo · Q phone · U units · F fullscreen · S hide",
                     st.source,
                     state,
                     a.view.name(),
@@ -501,7 +440,9 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Snapshot { out, seconds, width, live }) => snapshot(&cli, out, *seconds, *width, *live),
+        Some(Command::Snapshot { out, seconds, width, live, edit, height }) => {
+            snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height)
+        }
         None => run(&cli),
     }
 }

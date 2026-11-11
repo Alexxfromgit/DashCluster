@@ -104,13 +104,17 @@ pub struct DashboardView {
     since_statics: f32,
 }
 
+fn z_order(compiled: &Compiled) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..compiled.widgets.len()).collect();
+    order.sort_by_key(|&i| compiled.layout.widgets[i].z);
+    order
+}
+
 impl DashboardView {
     pub fn new(compiled: Compiled, units: UnitPrefs, base_dir: Option<PathBuf>) -> Self {
-        let mut order: Vec<usize> = (0..compiled.widgets.len()).collect();
-        order.sort_by_key(|&i| compiled.layout.widgets[i].z);
         let mut v = DashboardView {
+            order: z_order(&compiled),
             eval: Evaluator::new(compiled, units),
-            order,
             statics: Rc::new(VecModel::default()),
             frames: Rc::new(VecModel::default()),
             last_statics: vec![],
@@ -120,6 +124,37 @@ impl DashboardView {
         v.refresh_statics(&Snapshot::new(), true);
         v.update(&Snapshot::new(), 0.0);
         v
+    }
+
+    /// Swaps in an edited layout, keeping the same models (so the window stays bound).
+    pub fn replace(&mut self, compiled: Compiled, base_dir: Option<PathBuf>, snap: &Snapshot) {
+        let units = self.eval.units();
+        self.order = z_order(&compiled);
+        self.eval = Evaluator::new(compiled, units);
+        if base_dir.is_some() {
+            self.images = ImageCache::new(base_dir);
+        }
+        self.refresh_statics(snap, true);
+        self.frames.set_vec(Vec::new());
+        self.update(snap, 0.0);
+    }
+
+    /// Display row (z-order) → widget index in the layout.
+    pub fn order(&self) -> &[usize] {
+        &self.order
+    }
+
+    /// Live move/resize of one widget (editor drags): updates just its row.
+    pub fn set_rect(&mut self, widget: usize, rect: [f32; 4]) {
+        self.eval.set_rect(widget, rect);
+        let Some(row) = self.order.iter().position(|&i| i == widget) else { return };
+        if let Some(mut st) = self.statics.row_data(row) {
+            [st.x, st.y, st.w, st.h] = rect;
+            self.statics.set_row_data(row, st);
+        }
+        if let Some(s) = self.last_statics.get_mut(widget) {
+            [s.x, s.y, s.w, s.h] = rect;
+        }
     }
 
     pub fn compiled(&self) -> &Compiled {

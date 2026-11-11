@@ -1,5 +1,7 @@
 import { Dashboard, WType, WZone, WStatic, WFrame } from "dashboard.slint";
-export { WType, WZone, WStatic, WFrame }
+import { Toolbar, WidgetPalette, Inspector, EditOverlay, PropRow, PaletteItem } from "editor.slint";
+import { Palette } from "std-widgets.slint";
+export { WType, WZone, WStatic, WFrame, PropRow, PaletteItem }
 
 export component MainWindow inherits Window {
     title: "DashCluster — " + root.dashboard-name;
@@ -40,8 +42,69 @@ export component MainWindow inherits Window {
     callback toggle-demo();
     callback toggle-qr();
 
-    FocusScope {
+    // ---- editor
+    in-out property <bool> edit-mode;
+    in property <[bool]> selected;
+    in property <int> selection-count;
+    in property <[PropRow]> props;
+    in property <string> inspector-title;
+    in property <[PaletteItem]> palette-items;
+    in property <[color]> theme-swatches;
+    in property <[string]> theme-names;
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <bool> dirty;
+    in property <bool> snap: true;
+    in property <string> editor-title;
+    in property <string> editor-message;
+    callback toggle-edit();
+    callback editor-pointer-down(x: float, y: float, additive: bool, handle: float);
+    callback editor-pointer-move(x: float, y: float);
+    callback editor-pointer-up();
+    callback add-widget(kind: string);
+    callback prop-changed(key: string, value: string);
+    callback pick-image(key: string);
+    callback undo();
+    callback redo();
+    callback save();
+    callback save-as();
+    callback new-dashboard();
+    callback import-dashboard();
+    callback export-dashboard();
+    callback reveal-folder();
+    callback toggle-snap();
+    callback delete-selected();
+    callback duplicate-selected();
+    callback clear-selection();
+    callback nudge(dx: float, dy: float);
+    callback restack(delta: int);
+    callback align(how: string);
+
+    init => { Palette.color-scheme = ColorScheme.dark; }
+
+    fs := FocusScope {
         key-pressed(e) => {
+            if (root.edit-mode) {
+                if (e.modifiers.control || e.modifiers.meta) {
+                    if (e.text == "z" || e.text == "Z") {
+                        if (e.modifiers.shift) { root.redo(); } else { root.undo(); }
+                        return accept;
+                    }
+                    if (e.text == "y" || e.text == "Y") { root.redo(); return accept; }
+                    if (e.text == "d" || e.text == "D") { root.duplicate-selected(); return accept; }
+                    if (e.text == "s" || e.text == "S") { root.save(); return accept; }
+                    if (e.text == "e" || e.text == "E") { root.toggle-edit(); return accept; }
+                    return reject;
+                }
+                if (e.text == Key.Delete || e.text == Key.Backspace) { root.delete-selected(); return accept; }
+                if (e.text == Key.Escape) { root.clear-selection(); return accept; }
+                if (e.text == Key.LeftArrow) { root.nudge(e.modifiers.shift ? -10 : -1, 0); return accept; }
+                if (e.text == Key.RightArrow) { root.nudge(e.modifiers.shift ? 10 : 1, 0); return accept; }
+                if (e.text == Key.UpArrow) { root.nudge(0, e.modifiers.shift ? -10 : -1); return accept; }
+                if (e.text == Key.DownArrow) { root.nudge(0, e.modifiers.shift ? 10 : 1); return accept; }
+                if (e.text == "g" || e.text == "G") { root.toggle-snap(); return accept; }
+                return reject;
+            }
             if (e.text == Key.RightArrow || e.text == Key.PageDown) { root.next-dashboard(); return accept; }
             if (e.text == Key.LeftArrow || e.text == Key.PageUp) { root.previous-dashboard(); return accept; }
             if (e.text == "u" || e.text == "U") { root.toggle-units(); return accept; }
@@ -49,19 +112,76 @@ export component MainWindow inherits Window {
             if (e.text == "s" || e.text == "S") { root.toggle-status(); return accept; }
             if (e.text == "d" || e.text == "D") { root.toggle-demo(); return accept; }
             if (e.text == "q" || e.text == "Q") { root.toggle-qr(); return accept; }
+            if (e.text == "e" || e.text == "E") { root.toggle-edit(); return accept; }
             reject
         }
 
-        dash := Dashboard { }
-
-        if root.touch-nav: TouchArea {
-            clicked => {
-                if (self.pressed-x < root.width / 3) {
-                    root.previous-dashboard();
-                } else if (self.pressed-x > root.width * 2 / 3) {
-                    root.next-dashboard();
-                } else {
-                    root.toggle-fullscreen();
+        VerticalLayout {
+            if root.edit-mode: Toolbar {
+                can-undo: root.can-undo;
+                can-redo: root.can-redo;
+                dirty: root.dirty;
+                snap: root.snap;
+                title: root.editor-title;
+                message: root.editor-message;
+                done => { root.toggle-edit(); }
+                undo => { root.undo(); }
+                redo => { root.redo(); }
+                save => { root.save(); }
+                save-as => { root.save-as(); }
+                new-dashboard => { root.new-dashboard(); }
+                import => { root.import-dashboard(); }
+                export => { root.export-dashboard(); }
+                reveal-folder => { root.reveal-folder(); }
+                toggle-snap => { root.toggle-snap(); }
+            }
+            HorizontalLayout {
+                if root.edit-mode: WidgetPalette {
+                    items: root.palette-items;
+                    add(kind) => { root.add-widget(kind); fs.focus(); }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                    dash := Dashboard { }
+                    if root.edit-mode: EditOverlay {
+                        statics: dash.statics;
+                        selected: root.selected;
+                        unit: dash.unit;
+                        ox: dash.ox;
+                        oy: dash.oy;
+                        canvas-w: dash.canvas-w;
+                        canvas-h: dash.canvas-h;
+                        snap: root.snap;
+                        pointer-down(x, y, additive, handle) => { root.editor-pointer-down(x, y, additive, handle); }
+                        pointer-move(x, y) => { root.editor-pointer-move(x, y); }
+                        pointer-up => { root.editor-pointer-up(); }
+                        request-focus => { fs.focus(); }
+                    }
+                    if root.touch-nav && !root.edit-mode: TouchArea {
+                        clicked => {
+                            if (self.pressed-x < self.width / 3) {
+                                root.previous-dashboard();
+                            } else if (self.pressed-x > self.width * 2 / 3) {
+                                root.next-dashboard();
+                            } else {
+                                root.toggle-fullscreen();
+                            }
+                        }
+                    }
+                }
+                if root.edit-mode: Inspector {
+                    rows: root.props;
+                    title: root.inspector-title;
+                    has-selection: root.selection-count > 0;
+                    selection-count: root.selection-count;
+                    theme-swatches: root.theme-swatches;
+                    theme-names: root.theme-names;
+                    changed(key, value) => { root.prop-changed(key, value); }
+                    pick-image(key) => { root.pick-image(key); }
+                    duplicate => { root.duplicate-selected(); }
+                    delete => { root.delete-selected(); }
+                    restack(d) => { root.restack(d); }
+                    align(how) => { root.align(how); }
                 }
             }
         }
@@ -144,7 +264,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    if root.show-status: Text {
+    if root.show-status && !root.edit-mode: Text {
         x: 10px;
         y: root.height - self.height - 6px;
         text: root.status-text;

@@ -185,6 +185,13 @@ impl Evaluator {
         self.units
     }
 
+    /// Moves/resizes a widget without recompiling (live drags in the editor).
+    pub fn set_rect(&mut self, i: usize, [x, y, w, h]: [f32; 4]) {
+        if let Some(wd) = self.compiled.layout.widgets.get_mut(i) {
+            (wd.x, wd.y, wd.w, wd.h) = (x, y, w, h);
+        }
+    }
+
     pub fn set_units(&mut self, units: UnitPrefs) {
         self.units = units;
         self.smooth.iter_mut().for_each(|s| *s = [None; 4]);

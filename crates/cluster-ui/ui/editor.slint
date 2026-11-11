@@ -1,0 +1,316 @@
+// Visual editor panels. The dashboard itself stays the regular Dashboard component;
+// these panels and the selection overlay sit around and on top of it.
+
+import { Button, LineEdit, CheckBox, ComboBox, ScrollView } from "std-widgets.slint";
+import { WStatic } from "widgets.slint";
+
+// kind: 0 header, 1 text, 2 number, 3 bool, 4 color, 5 signal, 6 choice, 7 json, 8 image
+export struct PropRow {
+    key: string,
+    label: string,
+    kind: int,
+    value: string,
+    options: [string],
+    swatch: color,
+    error: string,
+}
+
+export struct PaletteItem { kind: string, label: string }
+
+export global EditorTheme {
+    out property <color> panel: #0f141b;
+    out property <color> panel-2: #151c25;
+    out property <color> line: #263040;
+    out property <color> text: #d7dee8;
+    out property <color> dim: #8b96a5;
+    out property <color> select: #3b8cff;
+    out property <color> error: #ff6b5e;
+}
+
+component SectionTitle inherits Text {
+    color: EditorTheme.dim;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+export component Toolbar inherits Rectangle {
+    in property <bool> can-undo;
+    in property <bool> can-redo;
+    in property <bool> dirty;
+    in property <bool> snap;
+    in property <string> title;
+    in property <string> message;
+    callback done();
+    callback undo();
+    callback redo();
+    callback save();
+    callback save-as();
+    callback new-dashboard();
+    callback import();
+    callback export();
+    callback toggle-snap();
+    callback reveal-folder();
+
+    height: 48px;
+    background: EditorTheme.panel;
+    Rectangle { y: parent.height - 1px; height: 1px; background: EditorTheme.line; }
+    HorizontalLayout {
+        padding: 8px;
+        spacing: 6px;
+        Button { text: "Done"; primary: true; clicked => { root.done(); } }
+        Rectangle { width: 6px; }
+        Button { text: "Undo"; enabled: root.can-undo; clicked => { root.undo(); } }
+        Button { text: "Redo"; enabled: root.can-redo; clicked => { root.redo(); } }
+        Rectangle { width: 6px; }
+        Button { text: "Save"; enabled: root.dirty; clicked => { root.save(); } }
+        Button { text: "Save as…"; clicked => { root.save-as(); } }
+        Button { text: "New"; clicked => { root.new-dashboard(); } }
+        Button { text: "Import…"; clicked => { root.import(); } }
+        Button { text: "Export…"; clicked => { root.export(); } }
+        Button { text: "Folder"; clicked => { root.reveal-folder(); } }
+        Rectangle { width: 6px; }
+        Button { text: root.snap ? "Snap: on" : "Snap: off"; checkable: true; checked: root.snap; clicked => { root.toggle-snap(); } }
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            padding-left: 10px;
+            Text { text: (root.dirty ? "● " : "") + root.title; color: EditorTheme.text; font-size: 13px; font-weight: 600; overflow: elide; }
+            if root.message != "": Text { text: root.message; color: EditorTheme.dim; font-size: 11px; overflow: elide; }
+        }
+    }
+}
+
+export component WidgetPalette inherits Rectangle {
+    in property <[PaletteItem]> items;
+    callback add(kind: string);
+    width: 170px;
+    background: EditorTheme.panel;
+    Rectangle { x: parent.width - 1px; width: 1px; background: EditorTheme.line; }
+    ScrollView {
+        VerticalLayout {
+            padding: 10px;
+            spacing: 6px;
+            alignment: start;
+            SectionTitle { text: "ADD WIDGET"; }
+            for item in root.items: Button {
+                text: item.label;
+                clicked => { root.add(item.kind); }
+            }
+            Rectangle { height: 10px; }
+            Text {
+                text: "Click a widget to select it; Shift-click adds to the selection. Drag to move; drag the corner square to resize. Click empty space for dashboard settings.\n\nArrow keys nudge (Shift: 10)\nDelete removes\nCtrl/Cmd+D duplicates\nCtrl/Cmd+Z undo, +Shift redo\nCtrl/Cmd+S saves\nG toggles snap · Esc deselects";
+                color: EditorTheme.dim;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component Inspector inherits Rectangle {
+    in property <[PropRow]> rows;
+    in property <string> title;
+    in property <bool> has-selection;
+    in property <int> selection-count;
+    in property <[color]> theme-swatches;
+    in property <[string]> theme-names;
+    callback changed(key: string, value: string);
+    callback pick-image(key: string);
+    callback duplicate();
+    callback delete();
+    callback restack(delta: int);
+    callback align(how: string);
+
+    width: 330px;
+    background: EditorTheme.panel;
+    Rectangle { width: 1px; x: 0; background: EditorTheme.line; }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+        Text { text: root.title; color: EditorTheme.text; font-size: 15px; font-weight: 700; overflow: elide; }
+        if root.has-selection: HorizontalLayout {
+            spacing: 4px;
+            Button { text: "Duplicate"; clicked => { root.duplicate(); } }
+            Button { text: "Delete"; clicked => { root.delete(); } }
+            Button { text: "Forward"; clicked => { root.restack(1); } }
+            Button { text: "Back"; clicked => { root.restack(-1); } }
+        }
+        if root.has-selection: HorizontalLayout {
+            spacing: 4px;
+            Text { text: "Horiz."; color: EditorTheme.dim; vertical-alignment: center; font-size: 11px; width: 44px; }
+            if root.selection-count > 1: Button { text: "Left"; clicked => { root.align("left"); } }
+            Button { text: root.selection-count > 1 ? "Center" : "Center on canvas"; clicked => { root.align("hcenter"); } }
+            if root.selection-count > 1: Button { text: "Right"; clicked => { root.align("right"); } }
+        }
+        if root.has-selection: HorizontalLayout {
+            spacing: 4px;
+            Text { text: "Vert."; color: EditorTheme.dim; vertical-alignment: center; font-size: 11px; width: 44px; }
+            if root.selection-count > 1: Button { text: "Top"; clicked => { root.align("top"); } }
+            Button { text: root.selection-count > 1 ? "Middle" : "Middle of canvas"; clicked => { root.align("vcenter"); } }
+            if root.selection-count > 1: Button { text: "Bottom"; clicked => { root.align("bottom"); } }
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 6px;
+                alignment: start;
+                for row in root.rows: VerticalLayout {
+                    spacing: 2px;
+                    if row.kind == 0: VerticalLayout {
+                        padding-top: 8px;
+                        SectionTitle { text: row.label; }
+                    }
+                    if row.kind != 0: HorizontalLayout {
+                        spacing: 6px;
+                        Text {
+                            text: row.label;
+                            color: EditorTheme.text;
+                            font-size: 12px;
+                            width: 112px;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                        }
+                        if row.kind == 1 || row.kind == 2: LineEdit {
+                            text: row.value;
+                            input-type: row.kind == 2 ? InputType.decimal : InputType.text;
+                            edited(t) => { root.changed(row.key, t); }
+                        }
+                        if row.kind == 7: LineEdit {
+                            text: row.value;
+                            placeholder-text: "JSON5, Enter to apply";
+                            accepted(t) => { root.changed(row.key, t); }
+                        }
+                        if row.kind == 3: CheckBox {
+                            checked: row.value == "true";
+                            toggled => { root.changed(row.key, self.checked ? "true" : "false"); }
+                        }
+                        if row.kind == 5 || row.kind == 6: ComboBox {
+                            model: row.options;
+                            current-value: row.value;
+                            selected(v) => { root.changed(row.key, v); }
+                        }
+                        if row.kind == 4: HorizontalLayout {
+                            spacing: 4px;
+                            Rectangle {
+                                width: 22px;
+                                border-radius: 4px;
+                                background: row.swatch;
+                                border-width: 1px;
+                                border-color: EditorTheme.line;
+                            }
+                            LineEdit {
+                                text: row.value;
+                                placeholder-text: "#rrggbb or theme";
+                                edited(t) => { root.changed(row.key, t); }
+                            }
+                        }
+                        if row.kind == 8: HorizontalLayout {
+                            spacing: 4px;
+                            LineEdit { text: row.value; accepted(t) => { root.changed(row.key, t); } }
+                            Button { text: "…"; clicked => { root.pick-image(row.key); } }
+                        }
+                    }
+                    if row.kind == 4: HorizontalLayout {
+                        padding-left: 118px;
+                        spacing: 3px;
+                        alignment: start;
+                        for c[i] in root.theme-swatches: Rectangle {
+                            width: 18px;
+                            height: 14px;
+                            border-radius: 3px;
+                            background: c;
+                            border-width: 1px;
+                            border-color: EditorTheme.line;
+                            TouchArea { clicked => { root.changed(row.key, root.theme-names[i]); } }
+                        }
+                    }
+                    if row.error != "": Text {
+                        text: row.error;
+                        color: EditorTheme.error;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Selection boxes and pointer handling over the dashboard. Positions are in canvas
+// units; Rust does hit-testing, dragging and snapping.
+export component EditOverlay inherits Rectangle {
+    in property <[WStatic]> statics;
+    in property <[bool]> selected;
+    in property <length> unit;
+    in property <length> ox;
+    in property <length> oy;
+    in property <float> canvas-w;
+    in property <float> canvas-h;
+    in property <bool> snap;
+    callback pointer-down(x: float, y: float, additive: bool, handle-size: float);
+    callback pointer-move(x: float, y: float);
+    callback pointer-up();
+    callback request-focus();
+
+    // Canvas outline and a light grid (every 50 units).
+    Rectangle {
+        x: root.ox;
+        y: root.oy;
+        width: root.canvas-w * root.unit;
+        height: root.canvas-h * root.unit;
+        border-width: 1px;
+        border-color: #ffffff30;
+        if root.snap: Rectangle {
+            for i in floor(root.canvas-w / 50): Rectangle {
+                x: (i + 1) * 50 * root.unit;
+                width: 1px;
+                background: #ffffff0d;
+            }
+            for i in floor(root.canvas-h / 50): Rectangle {
+                y: (i + 1) * 50 * root.unit;
+                height: 1px;
+                background: #ffffff0d;
+            }
+        }
+    }
+
+    for st[i] in root.statics: Rectangle {
+        property <bool> sel: i < root.selected.length && root.selected[i];
+        x: root.ox + st.x * root.unit;
+        y: root.oy + st.y * root.unit;
+        width: st.w * root.unit;
+        height: st.h * root.unit;
+        border-width: self.sel ? 2px : 1px;
+        border-color: self.sel ? EditorTheme.select : #ffffff26;
+        background: self.sel ? EditorTheme.select.transparentize(88%) : transparent;
+        if self.sel: Rectangle {
+            x: parent.width - 6px;
+            y: parent.height - 6px;
+            width: 12px;
+            height: 12px;
+            background: EditorTheme.select;
+            border-width: 1px;
+            border-color: #fff;
+        }
+    }
+
+    TouchArea {
+        property <float> ux: (self.mouse-x - root.ox) / root.unit;
+        property <float> uy: (self.mouse-y - root.oy) / root.unit;
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.left && e.kind == PointerEventKind.down) {
+                root.request-focus();
+                root.pointer-down(self.ux, self.uy, e.modifiers.shift || e.modifiers.meta || e.modifiers.control, 14px / root.unit);
+            } else if (e.button == PointerEventButton.left && e.kind == PointerEventKind.up) {
+                root.pointer-up();
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                root.pointer-move(self.ux, self.uy);
+            }
+        }
+    }
+}

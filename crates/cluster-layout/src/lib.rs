@@ -3,6 +3,7 @@
 //! app, the web display and the hub.
 
 pub mod compile;
+pub mod edit;
 pub mod eval;
 pub mod model;
 
