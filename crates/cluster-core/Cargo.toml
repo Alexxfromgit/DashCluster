@@ -1,0 +1,20 @@
+[package]
+name = "cluster-core"
+description = "Normalized vehicle signal model, units, signal bus and source trait"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+arc-swap.workspace = true
+web-time.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

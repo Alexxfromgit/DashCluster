@@ -1,0 +1,46 @@
+import { AnalogGauge } from "gauge.slint";
+
+export component MainWindow inherits Window {
+    title: "DashCluster";
+    preferred-width: 960px;
+    preferred-height: 540px;
+    background: #05070a;
+
+    in property <float> rpm;
+    in property <float> rpm-max: 8;
+    in property <float> rpm-red: 7;
+    in property <float> speed;
+    in property <string> speed-text;
+    in property <string> speed-unit;
+    in property <string> gear-text;
+    in property <string> status-text;
+
+    HorizontalLayout {
+        padding: 24px;
+        spacing: 24px;
+        AnalogGauge {
+            value: root.rpm;
+            max-value: root.rpm-max;
+            redline: root.rpm-red;
+            caption: "×1000 rpm";
+            value-text: root.gear-text;
+        }
+        AnalogGauge {
+            value: root.speed;
+            max-value: 280;
+            redline: 1000;
+            major-ticks: 7;
+            minor-ticks: 4;
+            caption: root.speed-unit;
+            value-text: root.speed-text;
+            accent: #2f81f7;
+        }
+    }
+    Text {
+        x: 12px;
+        y: root.height - self.height - 8px;
+        text: root.status-text;
+        color: #6e7681;
+        font-size: 12px;
+    }
+}
