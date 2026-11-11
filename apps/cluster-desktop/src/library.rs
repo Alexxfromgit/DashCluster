@@ -5,10 +5,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub enum Entry {
-    Builtin {
-        file: &'static str,
-        src: &'static str,
-    },
+    Builtin { file: &'static str, src: &'static str },
     File(PathBuf),
 }
 
@@ -16,10 +13,9 @@ impl Entry {
     pub fn label(&self) -> String {
         match self {
             Entry::Builtin { file, .. } => file.trim_end_matches(".json5").to_owned(),
-            Entry::File(p) => p.file_stem().map_or_else(
-                || p.display().to_string(),
-                |s| s.to_string_lossy().into_owned(),
-            ),
+            Entry::File(p) => {
+                p.file_stem().map_or_else(|| p.display().to_string(), |s| s.to_string_lossy().into_owned())
+            }
         }
     }
 
@@ -36,10 +32,8 @@ impl Entry {
         match self {
             Entry::Builtin { src, .. } => Ok((Compiled::from_json5(src)?, None)),
             Entry::File(p) => {
-                let text = std::fs::read_to_string(p)
-                    .map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
-                let c = Compiled::from_json5(&text)
-                    .map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
+                let text = std::fs::read_to_string(p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
+                let c = Compiled::from_json5(&text).map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
                 Ok((c, p.parent().map(Path::to_path_buf)))
             }
         }
@@ -54,10 +48,7 @@ pub struct Library {
 impl Library {
     /// Built-ins first, then each `extra` path (a .json5 file, or a folder of them).
     pub fn new(extra: &[PathBuf]) -> Self {
-        let mut entries: Vec<Entry> = BUILTIN
-            .iter()
-            .map(|(file, src)| Entry::Builtin { file, src })
-            .collect();
+        let mut entries: Vec<Entry> = BUILTIN.iter().map(|(file, src)| Entry::Builtin { file, src }).collect();
         for p in extra {
             if p.is_dir() {
                 let mut files: Vec<PathBuf> = std::fs::read_dir(p)
@@ -73,18 +64,13 @@ impl Library {
                 entries.push(Entry::File(p.clone()));
             }
         }
-        Library {
-            entries,
-            current: 0,
-        }
+        Library { entries, current: 0 }
     }
 
     /// Selects by built-in name ("race"), file stem, or path. Returns false if not found.
     pub fn select(&mut self, name: &str) -> bool {
-        let found = self
-            .entries
-            .iter()
-            .position(|e| e.label() == name || e.path().is_some_and(|p| p == Path::new(name)));
+        let found =
+            self.entries.iter().position(|e| e.label() == name || e.path().is_some_and(|p| p == Path::new(name)));
         if let Some(i) = found {
             self.current = i;
         }

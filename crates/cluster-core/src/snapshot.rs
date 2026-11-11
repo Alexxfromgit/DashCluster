@@ -16,10 +16,7 @@ pub struct Snapshot {
 
 impl Default for Snapshot {
     fn default() -> Self {
-        Snapshot {
-            seq: 0,
-            values: [f32::NAN; SignalId::COUNT],
-        }
+        Snapshot { seq: 0, values: [f32::NAN; SignalId::COUNT] }
     }
 }
 
@@ -163,14 +160,7 @@ mod tests {
         s.set(SignalId::Speed, 33.5);
         s.set(SignalId::Gear, 4.0);
         let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(
-            json,
-            format!(
-                "[42,{},33.5,{},4.0]",
-                SignalId::Speed.index(),
-                SignalId::Gear.index()
-            )
-        );
+        assert_eq!(json, format!("[42,{},33.5,{},4.0]", SignalId::Speed.index(), SignalId::Gear.index()));
         let back: Snapshot = serde_json::from_str(&json).unwrap();
         assert_eq!(back, s);
     }

@@ -1,9 +1,7 @@
 //! A simulated car driving laps of a made-up circuit. Deterministic, so it doubles as a
 //! test fixture: the same `dt` sequence always produces the same telemetry.
 
-use cluster_core::{
-    SignalId as S, SignalSet, Snapshot, SourceContext, SourceState, TelemetrySource,
-};
+use cluster_core::{SignalId as S, SignalSet, Snapshot, SourceContext, SourceState, TelemetrySource};
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
@@ -31,11 +29,7 @@ struct Segment {
 }
 
 const fn seg(length: f32, radius: f32, target_kmh: f32) -> Segment {
-    Segment {
-        length,
-        curvature: if radius == 0.0 { 0.0 } else { 1.0 / radius },
-        target_speed: target_kmh / 3.6,
-    }
+    Segment { length, curvature: if radius == 0.0 { 0.0 } else { 1.0 / radius }, target_speed: target_kmh / 3.6 }
 }
 
 /// A ~3.3 km fictional circuit.
@@ -176,17 +170,10 @@ impl DemoCar {
         let decel = 9.0;
         let braking_dist = (self.speed.powi(2) - next.target_speed.powi(2)) / (2.0 * decel);
         let (throttle, brake) = if next.target_speed < self.speed && to_next < braking_dist + 8.0 {
-            (
-                0.0,
-                ((braking_dist - to_next + 20.0) / 40.0).clamp(0.35, 1.0),
-            )
+            (0.0, ((braking_dist - to_next + 20.0) / 40.0).clamp(0.35, 1.0))
         } else {
             let err = cur.target_speed - self.speed;
-            if err > 0.0 {
-                ((err / 6.0).clamp(0.08, 1.0), 0.0)
-            } else {
-                (0.0, (-err / 15.0).clamp(0.0, 0.5))
-            }
+            if err > 0.0 { ((err / 6.0).clamp(0.08, 1.0), 0.0) } else { (0.0, (-err / 15.0).clamp(0.0, 0.5)) }
         };
         self.throttle = approach(self.throttle, throttle, 12.0, dt);
         self.brake = approach(self.brake, brake, 14.0, dt);
@@ -207,16 +194,10 @@ impl DemoCar {
         // Gearbox
         if self.shift_timer > 0.0 {
             self.shift_timer -= dt;
-        } else if self.rpm > RPM_REDLINE * 0.94
-            && self.gear < GEAR_RATIOS.len()
-            && self.throttle > 0.3
-        {
+        } else if self.rpm > RPM_REDLINE * 0.94 && self.gear < GEAR_RATIOS.len() && self.throttle > 0.3 {
             self.gear += 1;
             self.shift_timer = SHIFT_TIME;
-        } else if self.gear > 1
-            && self.wheel_rpm(self.gear - 1) < RPM_REDLINE * 0.78
-            && self.rpm < 3200.0
-        {
+        } else if self.gear > 1 && self.wheel_rpm(self.gear - 1) < RPM_REDLINE * 0.78 && self.rpm < 3200.0 {
             self.gear -= 1;
             self.shift_timer = SHIFT_TIME;
         }
@@ -227,30 +208,19 @@ impl DemoCar {
         // Engine speed: locked to the wheels, except a slipping clutch at launch.
         let locked = self.wheel_rpm(self.gear);
         let launch = RPM_IDLE + effective_throttle * 3200.0;
-        let target_rpm = if self.gear == 1 && locked < launch {
-            launch
-        } else {
-            locked.max(RPM_IDLE)
-        };
-        self.rpm = approach(
-            self.rpm,
-            target_rpm.min(RPM_MAX),
-            if shifting { 18.0 } else { 25.0 },
-            dt,
-        );
+        let target_rpm = if self.gear == 1 && locked < launch { launch } else { locked.max(RPM_IDLE) };
+        self.rpm = approach(self.rpm, target_rpm.min(RPM_MAX), if shifting { 18.0 } else { 25.0 }, dt);
         let limiter = self.rpm >= RPM_MAX - 20.0;
 
         // Longitudinal dynamics
         let torque = full_torque(self.rpm) * effective_throttle * if limiter { 0.0 } else { 1.0 };
-        let mut drive =
-            torque * GEAR_RATIOS[self.gear - 1] * FINAL_DRIVE * DRIVETRAIN_EFF / WHEEL_RADIUS;
+        let mut drive = torque * GEAR_RATIOS[self.gear - 1] * FINAL_DRIVE * DRIVETRAIN_EFF / WHEEL_RADIUS;
         let grip_limit = MASS * 9.81 * 1.1;
         self.tc = drive > grip_limit && self.gear <= 2;
         if self.tc {
             drive = grip_limit;
         }
-        let drag = 0.5 * AIR_DENSITY * CDA * self.speed.powi(2)
-            + if self.speed > 0.1 { ROLLING } else { 0.0 };
+        let drag = 0.5 * AIR_DENSITY * CDA * self.speed.powi(2) + if self.speed > 0.1 { ROLLING } else { 0.0 };
         let braking = self.brake * MAX_BRAKE_FORCE * if self.speed > 0.1 { 1.0 } else { 0.0 };
         self.abs = self.brake > 0.85 && self.speed > 8.0;
         let accel = (drive - drag - braking) / MASS;
@@ -279,17 +249,13 @@ impl DemoCar {
         for (i, t) in self.tyres.iter_mut().enumerate() {
             let side = if i % 2 == 0 { -1.0 } else { 1.0 }; // left / right
             let outer = (side * self.accel_lat.signum()).max(0.0);
-            let target =
-                55.0 + self.speed * 0.25 + lat_heat * 30.0 * (0.5 + outer) + self.brake * 15.0;
+            let target = 55.0 + self.speed * 0.25 + lat_heat * 30.0 * (0.5 + outer) + self.brake * 15.0;
             *t = approach(*t, target, 1.0 / 20.0, dt);
         }
         let power_kw = torque * self.rpm * 2.0 * PI / 60.0 / 1000.0;
         self.fuel_l = (self.fuel_l - power_kw * 0.000_08 * dt - 0.0005 * dt).max(0.0);
-        let boost_target = if self.rpm > 2200.0 {
-            effective_throttle * ((self.rpm - 2200.0) / 2000.0).min(1.0) * 105.0
-        } else {
-            0.0
-        };
+        let boost_target =
+            if self.rpm > 2200.0 { effective_throttle * ((self.rpm - 2200.0) / 2000.0).min(1.0) * 105.0 } else { 0.0 };
         self.boost_kpa = approach(self.boost_kpa, boost_target, 4.0, dt);
         self.seq += 1;
     }
@@ -298,11 +264,7 @@ impl DemoCar {
         let mut s = Snapshot::new();
         s.seq = self.seq;
         let shifting = self.shift_timer > 0.0;
-        let torque = if shifting {
-            0.0
-        } else {
-            full_torque(self.rpm) * self.throttle
-        };
+        let torque = if shifting { 0.0 } else { full_torque(self.rpm) * self.throttle };
         s.set(S::Speed, self.speed);
         s.set(S::Rpm, self.rpm);
         s.set(S::RpmMax, RPM_MAX);
@@ -319,10 +281,7 @@ impl DemoCar {
         s.set(S::Fuel, self.fuel_l / FUEL_CAPACITY_L);
         s.set(S::CoolantTemp, self.coolant);
         s.set(S::OilTemp, self.oil);
-        for (id, t) in [S::TyreTempFl, S::TyreTempFr, S::TyreTempRl, S::TyreTempRr]
-            .into_iter()
-            .zip(self.tyres)
-        {
+        for (id, t) in [S::TyreTempFl, S::TyreTempFr, S::TyreTempRl, S::TyreTempRr].into_iter().zip(self.tyres) {
             s.set(id, t);
         }
         let roll = (self.accel_lat / 9.81 * 0.15).clamp(-0.3, 0.3);
@@ -361,14 +320,8 @@ impl DemoCar {
         let next = TRACK[(idx + 1) % TRACK.len()];
         let blink = (self.time * 2.5).fract() < 0.5;
         let before_corner = TRACK[idx].curvature == 0.0 && TRACK[idx].length - into < 120.0;
-        s.set_flag(
-            S::BlinkerLeft,
-            before_corner && next.curvature < 0.0 && blink,
-        );
-        s.set_flag(
-            S::BlinkerRight,
-            before_corner && next.curvature > 0.0 && blink,
-        );
+        s.set_flag(S::BlinkerLeft, before_corner && next.curvature < 0.0 && blink);
+        s.set_flag(S::BlinkerRight, before_corner && next.curvature > 0.0 && blink);
         s.set_flag(S::PitLimiter, false);
         s.set(S::Cylinders, 6.0);
         s.set(S::CarId, 0.0);
@@ -384,10 +337,7 @@ pub struct DemoSource {
 
 impl DemoSource {
     pub fn new(rate_hz: f32) -> Self {
-        DemoSource {
-            rate_hz: rate_hz.clamp(1.0, 240.0),
-            car: DemoCar::new(),
-        }
+        DemoSource { rate_hz: rate_hz.clamp(1.0, 240.0), car: DemoCar::new() }
     }
 }
 
@@ -403,22 +353,17 @@ impl TelemetrySource for DemoSource {
     }
 
     fn capabilities(&self) -> SignalSet {
-        DemoCar::new()
-            .snapshot()
-            .present()
-            .iter()
-            .chain([S::LastLap, S::BestLap])
-            .fold(SignalSet::EMPTY, |mut acc, id| {
+        DemoCar::new().snapshot().present().iter().chain([S::LastLap, S::BestLap]).fold(
+            SignalSet::EMPTY,
+            |mut acc, id| {
                 acc.insert(id);
                 acc
-            })
+            },
+        )
     }
 
     fn run(&mut self, ctx: &SourceContext) -> anyhow::Result<()> {
-        ctx.set_state(
-            SourceState::Live,
-            format!("Simulated at {:.0} Hz", self.rate_hz),
-        );
+        ctx.set_state(SourceState::Live, format!("Simulated at {:.0} Hz", self.rate_hz));
         let period = Duration::from_secs_f32(1.0 / self.rate_hz);
         let mut last = Instant::now();
         while !ctx.should_stop() {
@@ -450,41 +395,20 @@ mod tests {
     #[test]
     fn drives_laps_within_limits() {
         let frames = simulate(240.0);
-        let max_speed = frames
-            .iter()
-            .filter_map(|f| f.get(S::Speed))
-            .fold(0.0, f32::max);
-        let max_gear = frames
-            .iter()
-            .filter_map(|f| f.get(S::Gear))
-            .fold(0.0, f32::max);
-        let max_rpm = frames
-            .iter()
-            .filter_map(|f| f.get(S::Rpm))
-            .fold(0.0, f32::max);
+        let max_speed = frames.iter().filter_map(|f| f.get(S::Speed)).fold(0.0, f32::max);
+        let max_gear = frames.iter().filter_map(|f| f.get(S::Gear)).fold(0.0, f32::max);
+        let max_rpm = frames.iter().filter_map(|f| f.get(S::Rpm)).fold(0.0, f32::max);
         let last = frames.last().unwrap();
-        assert!(
-            max_speed * 3.6 > 180.0,
-            "top speed {} km/h",
-            max_speed * 3.6
-        );
+        assert!(max_speed * 3.6 > 180.0, "top speed {} km/h", max_speed * 3.6);
         assert!(max_gear >= 5.0, "max gear {max_gear}");
         assert!(max_rpm <= RPM_MAX + 1.0, "rpm {max_rpm}");
-        assert!(
-            last.get(S::LapNumber).unwrap() >= 2.0,
-            "should complete a lap in 4 minutes"
-        );
+        assert!(last.get(S::LapNumber).unwrap() >= 2.0, "should complete a lap in 4 minutes");
         let best = last.get(S::BestLap).unwrap();
         assert!((60.0..200.0).contains(&best), "lap time {best}");
         assert!(last.get(S::CoolantTemp).unwrap() > 60.0, "engine warms up");
+        assert!(frames.iter().any(|f| f.get(S::Brake).unwrap() > 0.5), "brakes for corners");
         assert!(
-            frames.iter().any(|f| f.get(S::Brake).unwrap() > 0.5),
-            "brakes for corners"
-        );
-        assert!(
-            frames
-                .iter()
-                .any(|f| f.get(S::Gear).unwrap() < max_gear && f.get(S::Speed).unwrap() > 15.0),
+            frames.iter().any(|f| f.get(S::Gear).unwrap() < max_gear && f.get(S::Speed).unwrap() > 15.0),
             "downshifts"
         );
     }

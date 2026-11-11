@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/*"]
+members = ["crates/*", "apps/*", "tools/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ publish = false
 [workspace.dependencies]
 cluster-core = { path = "crates/cluster-core" }
 source-demo = { path = "crates/source-demo" }
+source-forza = { path = "crates/source-forza" }
 cluster-ui = { path = "crates/cluster-ui" }
 cluster-layout = { path = "crates/cluster-layout" }
 

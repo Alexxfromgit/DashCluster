@@ -12,19 +12,10 @@ pub use model::Layout;
 
 /// Built-in sample dashboards: (file name, JSON5 source).
 pub const BUILTIN: &[(&str, &str)] = &[
-    (
-        "grand-tourer.json5",
-        include_str!("../../../dashboards/grand-tourer.json5"),
-    ),
+    ("grand-tourer.json5", include_str!("../../../dashboards/grand-tourer.json5")),
     ("race.json5", include_str!("../../../dashboards/race.json5")),
-    (
-        "rally.json5",
-        include_str!("../../../dashboards/rally.json5"),
-    ),
-    (
-        "phone-portrait.json5",
-        include_str!("../../../dashboards/phone-portrait.json5"),
-    ),
+    ("rally.json5", include_str!("../../../dashboards/rally.json5")),
+    ("phone-portrait.json5", include_str!("../../../dashboards/phone-portrait.json5")),
 ];
 
 #[cfg(test)]
@@ -47,12 +38,7 @@ mod tests {
             { id: "a", type: "lamp", x: 0, y: 0, w: 0, h: 10, bind: "abs_active", icon: "ABS", color: "pink" },
         ] }"##;
         let err = Compiled::from_json5(src).unwrap_err().to_string();
-        assert!(
-            err.contains(
-                "widgets[0] \"a\" › bind: unknown signal \"spede\" — did you mean \"speed\"?"
-            ),
-            "{err}"
-        );
+        assert!(err.contains("widgets[0] \"a\" › bind: unknown signal \"spede\" — did you mean \"speed\"?"), "{err}");
         assert!(err.contains("duplicate widget id"), "{err}");
         assert!(err.contains("width and height must be positive"), "{err}");
         assert!(err.contains("unknown color \"pink\""), "{err}");

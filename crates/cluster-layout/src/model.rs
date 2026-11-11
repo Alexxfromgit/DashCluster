@@ -85,12 +85,7 @@ pub struct Background {
 
 impl Default for Background {
     fn default() -> Self {
-        Background {
-            color: "#05070a".into(),
-            gradient_to: None,
-            gradient_angle: 180.0,
-            image: None,
-        }
+        Background { color: "#05070a".into(), gradient_to: None, gradient_angle: 180.0, image: None }
     }
 }
 
@@ -238,23 +233,9 @@ impl From<BindingRepr> for Binding {
     fn from(r: BindingRepr) -> Self {
         match r {
             BindingRepr::Name(signal) => Binding::new(&signal),
-            BindingRepr::Full {
-                signal,
-                scale,
-                offset,
-                smoothing,
-                ceil_to,
-                convert,
-                fallback,
-            } => Binding {
-                signal,
-                scale,
-                offset,
-                smoothing,
-                ceil_to,
-                convert,
-                fallback,
-            },
+            BindingRepr::Full { signal, scale, offset, smoothing, ceil_to, convert, fallback } => {
+                Binding { signal, scale, offset, smoothing, ceil_to, convert, fallback }
+            }
         }
     }
 }
@@ -492,13 +473,7 @@ pub struct TyreQuad {
 }
 
 fn tyre_signals() -> [Binding; 4] {
-    [
-        "tyre_temp_fl",
-        "tyre_temp_fr",
-        "tyre_temp_rl",
-        "tyre_temp_rr",
-    ]
-    .map(Binding::new)
+    ["tyre_temp_fl", "tyre_temp_fr", "tyre_temp_rl", "tyre_temp_rr"].map(Binding::new)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

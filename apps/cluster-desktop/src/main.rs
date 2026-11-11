@@ -1,12 +1,15 @@
 mod library;
+mod sources;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use cluster_core::{SignalBus, SourceRunner, SourceState, UnitPrefs};
+use cluster_core::{SignalBus, SignalId, SourceState, UnitPrefs};
 use cluster_ui::{DashboardView, MainWindow};
 use library::Library;
 use notify::Watcher;
 use slint::ComponentHandle;
+use sources::{SourceConfig, SourceKind, Sources};
 use std::cell::RefCell;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -24,8 +27,36 @@ struct Cli {
     dashboards: Vec<PathBuf>,
     #[arg(long, value_enum, default_value_t = Units::Metric, global = true)]
     units: Units,
+    /// Where telemetry comes from. Press D in the app to toggle the demo car.
+    #[arg(long, value_enum, default_value_t = Source::Forza, global = true)]
+    source: Source,
+    /// UDP port Forza sends to (Forza: Settings → HUD and Gameplay → Data Out IP Port).
+    #[arg(long, default_value_t = source_forza::DEFAULT_PORT, global = true)]
+    port: u16,
+    /// Record raw Forza packets to this .ctlog file.
+    #[arg(long, value_name = "FILE", global = true)]
+    record: Option<PathBuf>,
+    /// Re-send raw Forza packets to another tool (repeatable), e.g. 127.0.0.1:5301.
+    #[arg(long, value_name = "ADDR", global = true)]
+    forward: Vec<SocketAddr>,
+    /// Recording to play with --source replay.
+    #[arg(long, value_name = "FILE", global = true)]
+    replay: Option<PathBuf>,
+    /// Replay speed multiplier.
+    #[arg(long, default_value_t = 1.0, global = true)]
+    replay_speed: f32,
     #[command(subcommand)]
     command: Option<Command>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+enum Source {
+    /// Forza Motorsport / Horizon Data Out (UDP)
+    Forza,
+    /// Built-in simulated car
+    Demo,
+    /// Play a .ctlog recording (see --replay)
+    Replay,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
@@ -55,7 +86,30 @@ enum Command {
         /// Image width; height follows the dashboard's aspect ratio.
         #[arg(long, default_value_t = 1600)]
         width: u32,
+        /// Run the configured --source in real time for --seconds instead of
+        /// simulating the demo car (end-to-end check).
+        #[arg(long)]
+        live: bool,
     },
+}
+
+fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
+    Ok(match cli.source {
+        Source::Forza => SourceKind::Forza,
+        Source::Demo => SourceKind::Demo,
+        Source::Replay => SourceKind::Replay(
+            cli.replay.clone().ok_or_else(|| anyhow::anyhow!("--source replay needs --replay FILE"))?,
+        ),
+    })
+}
+
+fn source_config(cli: &Cli) -> SourceConfig {
+    SourceConfig {
+        forza_port: cli.port,
+        record: cli.record.clone(),
+        forward: cli.forward.clone(),
+        replay_speed: cli.replay_speed,
+    }
 }
 
 fn library(cli: &Cli) -> anyhow::Result<Library> {
@@ -68,21 +122,35 @@ fn library(cli: &Cli) -> anyhow::Result<Library> {
     Ok(lib)
 }
 
-fn snapshot(cli: &Cli, out: &std::path::Path, seconds: f32, width: u32) -> anyhow::Result<()> {
+fn snapshot(cli: &Cli, out: &std::path::Path, seconds: f32, width: u32, live: bool) -> anyhow::Result<()> {
     let lib = library(cli)?;
     let (compiled, base) = lib.current().load()?;
     let (cw, ch) = (compiled.layout.canvas.width, compiled.layout.canvas.height);
     let height = (width as f32 * ch / cw).round() as u32;
     let off = cluster_ui::offscreen::install(width, height)?;
     let ui = MainWindow::new()?;
-    let mut car = source_demo::DemoCar::new();
     let mut view = DashboardView::new(compiled, cli.units.prefs(), base);
     let dt = 1.0 / 60.0;
-    for _ in 0..(seconds / dt) as usize {
-        car.step(dt);
-        view.update(&car.snapshot(), dt);
-    }
-    view.refresh_statics(&car.snapshot(), false);
+    let snap = if live {
+        let bus = SignalBus::new();
+        let _sources = Sources::new(bus.clone(), source_config(cli), source_kind(cli)?);
+        let end = Instant::now() + Duration::from_secs_f32(seconds);
+        while Instant::now() < end {
+            view.update(&bus.latest().snapshot, dt);
+            std::thread::sleep(Duration::from_secs_f32(dt));
+        }
+        let st = bus.status();
+        println!("source: {} · {:?} · {} · {} frames", st.source, st.state, st.detail, bus.publish_count());
+        bus.latest().snapshot.clone()
+    } else {
+        let mut car = source_demo::DemoCar::new();
+        for _ in 0..(seconds / dt) as usize {
+            car.step(dt);
+            view.update(&car.snapshot(), dt);
+        }
+        car.snapshot()
+    };
+    view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
     ui.set_show_status(false);
     ui.show()?;
@@ -165,10 +233,7 @@ impl App {
         match watcher {
             Ok(mut w) => {
                 // Watch the folder: editors often save by replacing the file.
-                let dir = path
-                    .parent()
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| PathBuf::from("."));
+                let dir = path.parent().map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
                 if let Err(e) = w.watch(&dir, notify::RecursiveMode::NonRecursive) {
                     log::warn!("can't watch {}: {e}", dir.display());
                 }
@@ -183,10 +248,7 @@ impl App {
             self.pending_reload = Some(Instant::now());
         }
         // Debounce: editors write several events per save.
-        if self
-            .pending_reload
-            .is_some_and(|t| t.elapsed() > Duration::from_millis(150))
-        {
+        if self.pending_reload.is_some_and(|t| t.elapsed() > Duration::from_millis(150)) {
             self.pending_reload = None;
             if self.load_current() {
                 log::info!("reloaded {}", self.lib.current().label());
@@ -198,18 +260,13 @@ impl App {
 
 fn run(cli: &Cli) -> anyhow::Result<()> {
     let bus = SignalBus::new();
-    let _runner = SourceRunner::start(bus.clone(), Box::new(source_demo::DemoSource::default()));
+    let sources = Rc::new(RefCell::new(Sources::new(bus.clone(), source_config(cli), source_kind(cli)?)));
 
     let ui = MainWindow::new()?;
     let lib = library(cli)?;
     let (compiled, base) = cluster_layout::BUILTIN
         .first()
-        .map(|(_, src)| {
-            (
-                cluster_layout::Compiled::from_json5(src).expect("built-in dashboard"),
-                None,
-            )
-        })
+        .map(|(_, src)| (cluster_layout::Compiled::from_json5(src).expect("built-in dashboard"), None))
         .expect("built-ins exist");
     let units = cli.units.prefs();
     let (reload_tx, reload_rx) = mpsc::channel();
@@ -244,19 +301,21 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         let bus = bus.clone();
         ui.on_toggle_units(move || {
             let mut a = app.borrow_mut();
-            a.units = if a.units == UnitPrefs::default() {
-                UnitPrefs::imperial()
-            } else {
-                UnitPrefs::default()
-            };
+            a.units = if a.units == UnitPrefs::default() { UnitPrefs::imperial() } else { UnitPrefs::default() };
             let units = a.units;
             a.view.set_units(units, &bus.latest().snapshot);
-            let label = if units == UnitPrefs::default() {
-                "Units: metric"
-            } else {
-                "Units: imperial"
-            };
+            let label = if units == UnitPrefs::default() { "Units: metric" } else { "Units: imperial" };
             a.toast(label);
+        });
+    }
+    {
+        let sources = sources.clone();
+        let app = app.clone();
+        let bus = bus.clone();
+        ui.on_toggle_demo(move || {
+            sources.borrow_mut().toggle_demo();
+            let name = bus.status().source.clone();
+            app.borrow_mut().toast(&name);
         });
     }
     {
@@ -282,58 +341,64 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     let mut rate = 0.0f32;
     {
         let app = app.clone();
-        timer.start(
-            slint::TimerMode::Repeated,
-            Duration::from_millis(16),
-            move || {
-                let now = Instant::now();
-                let dt = (now - last).as_secs_f32();
-                last = now;
-                let mut a = app.borrow_mut();
-                a.poll_reload();
-                let frame = bus.latest();
-                a.view.update(&frame.snapshot, dt);
+        timer.start(slint::TimerMode::Repeated, Duration::from_millis(16), move || {
+            let now = Instant::now();
+            let dt = (now - last).as_secs_f32();
+            last = now;
+            let mut a = app.borrow_mut();
+            a.poll_reload();
+            let frame = bus.latest();
+            a.view.update(&frame.snapshot, dt);
 
-                if rate_at.elapsed() >= Duration::from_secs(1) {
-                    let c = bus.publish_count();
-                    rate = c.saturating_sub(rate_count) as f32 / rate_at.elapsed().as_secs_f32();
-                    rate_count = c;
-                    rate_at = Instant::now();
+            if rate_at.elapsed() >= Duration::from_secs(1) {
+                let c = bus.publish_count();
+                rate = c.saturating_sub(rate_count) as f32 / rate_at.elapsed().as_secs_f32();
+                rate_count = c;
+                rate_at = Instant::now();
+            }
+            let st = bus.status();
+            let stale = match st.state {
+                SourceState::Live | SourceState::Waiting => bus.age_secs().is_none_or(|age| age > 0.5),
+                _ => false,
+            };
+            let state = match &st.state {
+                SourceState::Idle => "idle".to_owned(),
+                SourceState::Waiting => "waiting".to_owned(),
+                SourceState::Live => format!("{rate:.0} Hz"),
+                SourceState::Error(e) => format!("error: {e}"),
+            };
+            let paused = frame.snapshot.get(SignalId::RaceOn) == Some(0.0);
+            let (title, detail) = match &st.state {
+                SourceState::Error(e) => ("Telemetry source stopped".to_owned(), e.clone()),
+                _ if stale => {
+                    ("Waiting for telemetry…".to_owned(), format!("{}\nPress D for the demo car.", st.detail))
                 }
-                let st = bus.status();
-                let stale = match st.state {
-                    SourceState::Live | SourceState::Waiting => {
-                        bus.age_secs().is_none_or(|age| age > 0.5)
-                    }
-                    _ => false,
-                };
-                let state = match &st.state {
-                    SourceState::Idle => "idle".to_owned(),
-                    SourceState::Waiting => "waiting".to_owned(),
-                    SourceState::Live => format!("{rate:.0} Hz"),
-                    SourceState::Error(e) => format!("error: {e}"),
-                };
-                let ui = a.ui();
-                ui.set_stale(stale);
-                ui.set_status_text(
-                    format!(
-                        "{} · {} · {} · {}/{}  —  ←/→ dashboards · U units · F fullscreen · S hide",
-                        st.source,
-                        state,
-                        a.view.name(),
-                        a.lib.current + 1,
-                        a.lib.entries.len()
-                    )
-                    .into(),
-                );
-                if a.toast_until.is_some_and(|t| now >= t) {
-                    a.toast_until = None;
-                    ui.set_toast_text("".into());
-                }
-            },
-        );
+                _ if paused => ("Game paused or in a menu".to_owned(), String::new()),
+                _ => (String::new(), String::new()),
+            };
+            let ui = a.ui();
+            ui.set_overlay_title(title.into());
+            ui.set_overlay_detail(detail.into());
+            ui.set_stale(stale || paused);
+            ui.set_status_text(
+                format!(
+                    "{} · {} · {} · {}/{}  —  ←/→ dashboards · D demo · U units · F fullscreen · S hide",
+                    st.source,
+                    state,
+                    a.view.name(),
+                    a.lib.current + 1,
+                    a.lib.entries.len()
+                )
+                .into(),
+            );
+            if a.toast_until.is_some_and(|t| now >= t) {
+                a.toast_until = None;
+                ui.set_toast_text("".into());
+            }
+        });
     }
     ui.run()?;
+    drop(sources);
     Ok(())
 }
 
@@ -341,11 +406,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Snapshot {
-            out,
-            seconds,
-            width,
-        }) => snapshot(&cli, out, *seconds, *width),
+        Some(Command::Snapshot { out, seconds, width, live }) => snapshot(&cli, out, *seconds, *width, *live),
         None => run(&cli),
     }
 }

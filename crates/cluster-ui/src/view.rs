@@ -64,10 +64,7 @@ pub struct ImageCache {
 
 impl ImageCache {
     pub fn new(base_dir: Option<PathBuf>) -> Self {
-        ImageCache {
-            base_dir,
-            cache: HashMap::new(),
-        }
+        ImageCache { base_dir, cache: HashMap::new() }
     }
 
     pub fn get(&mut self, src: &str) -> slint::Image {
@@ -152,12 +149,7 @@ impl DashboardView {
         let bg = &self.compiled().layout.background;
         let angle = bg.gradient_angle;
         let image = bg.image.clone().unwrap_or_default();
-        (
-            color(c0),
-            color(c1.unwrap_or(c0)),
-            angle,
-            self.images.get(&image),
-        )
+        (color(c0), color(c1.unwrap_or(c0)), angle, self.images.get(&image))
     }
 
     pub fn units(&self) -> UnitPrefs {
@@ -173,11 +165,7 @@ impl DashboardView {
         let zones: Vec<WZone> = s
             .zones
             .iter()
-            .map(|(from, to, c)| WZone {
-                from: from.max(s.min),
-                to: to.min(s.max),
-                color: color(*c),
-            })
+            .map(|(from, to, c)| WZone { from: from.max(s.min), to: to.min(s.max), color: color(*c) })
             .collect();
         WStatic {
             kind: kind(s.kind),
@@ -209,19 +197,11 @@ impl DashboardView {
             },
             vertical: s.vertical,
             show_value: s.show_value,
-            segments: ModelRc::new(VecModel::from(
-                s.segment_colors
-                    .iter()
-                    .map(|c| color(*c))
-                    .collect::<Vec<_>>(),
-            )),
+            segments: ModelRc::new(VecModel::from(s.segment_colors.iter().map(|c| color(*c)).collect::<Vec<_>>())),
             color: color(s.color),
             icon: s.icon.as_str().into(),
             names: ModelRc::new(VecModel::from(
-                s.names
-                    .iter()
-                    .map(|n| SharedString::from(n.as_str()))
-                    .collect::<Vec<_>>(),
+                s.names.iter().map(|n| SharedString::from(n.as_str())).collect::<Vec<_>>(),
             )),
             image: self.images.get(&s.image),
             fit: match s.image_fit {
@@ -245,10 +225,7 @@ impl DashboardView {
         let rebuild = force || self.statics.row_count() != self.order.len();
         let order = self.order.clone();
         if rebuild {
-            let rows: Vec<WStatic> = order
-                .iter()
-                .map(|&i| self.static_to_slint(&new[i]))
-                .collect();
+            let rows: Vec<WStatic> = order.iter().map(|&i| self.static_to_slint(&new[i])).collect();
             self.statics.set_vec(rows);
         } else {
             for (row, &i) in order.iter().enumerate() {
@@ -269,12 +246,7 @@ impl DashboardView {
         }
         let frames = self.eval.frame(snap, dt);
         if self.frames.row_count() != self.order.len() {
-            self.frames.set_vec(
-                self.order
-                    .iter()
-                    .map(|&i| frame_to_slint(&frames[i]))
-                    .collect::<Vec<_>>(),
-            );
+            self.frames.set_vec(self.order.iter().map(|&i| frame_to_slint(&frames[i])).collect::<Vec<_>>());
             return;
         }
         for (row, &i) in self.order.iter().enumerate() {

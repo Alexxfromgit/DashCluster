@@ -28,20 +28,19 @@
     { id: "gear", type: "gear", x: 700, y: 110, w: 200, h: 200,
       shift_at: { signal: "rpm_max", scale: 0.92 }, style: { accent: "danger" } },
 
-    { id: "oil", type: "readout", x: 630, y: 320, w: 160, h: 60, label: "OIL",
-      bind: "oil_temp", zones: [ { from: 125, color: "danger" } ] },
+    { id: "power", type: "readout", x: 630, y: 320, w: 160, h: 60, label: "POWER",
+      bind: "power", zones: [ { to: 0, color: "info" } ] },
     { id: "boost", type: "readout", x: 810, y: 320, w: 160, h: 60, label: "BOOST",
       bind: "boost", format: { decimals: 2 } },
 
-    { id: "water", type: "bar_gauge", x: 630, y: 400, w: 340, h: 34, label: "WATER",
-      bind: "coolant_temp", min: 40, max: 130, format: { decimals: 0 },
-      zones: [ { to: 70, color: "info" }, { from: 110, color: "danger" } ] },
+    { id: "torque", type: "bar_gauge", x: 630, y: 400, w: 340, h: 34, label: "TORQUE",
+      bind: "torque", min: 0, max: 800, zones: [ { from: 650, color: "danger" } ] },
     { id: "fuel", type: "bar_gauge", x: 630, y: 446, w: 340, h: 34, label: "FUEL",
       bind: "fuel", min: 0, max: 100, zones: [ { to: 12, color: "warn" } ] },
 
-    { id: "abs", type: "lamp", x: 630, y: 510, w: 76, h: 44, bind: "abs_active", icon: "ABS" },
-    { id: "tc", type: "lamp", x: 718, y: 510, w: 76, h: 44, bind: "tc_active", icon: "TC" },
-    { id: "eng", type: "lamp", x: 806, y: 510, w: 76, h: 44, bind: "engine_warning", icon: "ENG", color: "danger" },
-    { id: "lights", type: "lamp", x: 894, y: 510, w: 76, h: 44, bind: "lights", icon: "BEAM", color: "info" },
+    { id: "hb", type: "lamp", x: 630, y: 510, w: 76, h: 44, bind: "handbrake", above: 10, icon: "HB", color: "danger" },
+    { id: "slip", type: "lamp", x: 718, y: 510, w: 76, h: 44, bind: "slip_rl", above: 100, icon: "SLIP", blink: true },
+    { id: "abs", type: "lamp", x: 806, y: 510, w: 76, h: 44, bind: "abs_active", icon: "ABS" },
+    { id: "tc", type: "lamp", x: 894, y: 510, w: 76, h: 44, bind: "tc_active", icon: "TC" },
   ],
 }

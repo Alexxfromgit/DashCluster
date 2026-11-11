@@ -21,20 +21,11 @@ impl Rgba {
     pub fn parse_hex(s: &str) -> Option<Rgba> {
         let h = s.strip_prefix('#')?;
         let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
-        let nib = |i: usize| {
-            u8::from_str_radix(h.get(i..i + 1)?, 16)
-                .ok()
-                .map(|v| v * 17)
-        };
+        let nib = |i: usize| u8::from_str_radix(h.get(i..i + 1)?, 16).ok().map(|v| v * 17);
         match h.len() {
             3 => Some(Rgba::rgb(nib(0)?, nib(1)?, nib(2)?)),
             6 => Some(Rgba::rgb(byte(0)?, byte(2)?, byte(4)?)),
-            8 => Some(Rgba {
-                r: byte(0)?,
-                g: byte(2)?,
-                b: byte(4)?,
-                a: byte(6)?,
-            }),
+            8 => Some(Rgba { r: byte(0)?, g: byte(2)?, b: byte(4)?, a: byte(6)? }),
             _ => None,
         }
     }
@@ -81,23 +72,12 @@ impl Palette {
 
     /// Resolves a theme name or hex color.
     pub fn resolve(&self, spec: &str) -> Option<Rgba> {
-        self.named(spec.trim())
-            .or_else(|| Rgba::parse_hex(spec.trim()))
+        self.named(spec.trim()).or_else(|| Rgba::parse_hex(spec.trim()))
     }
 }
 
-pub const THEME_COLOR_NAMES: &[&str] = &[
-    "ink",
-    "muted",
-    "accent",
-    "danger",
-    "warn",
-    "ok",
-    "info",
-    "face",
-    "edge",
-    "transparent",
-];
+pub const THEME_COLOR_NAMES: &[&str] =
+    &["ink", "muted", "accent", "danger", "warn", "ok", "info", "face", "edge", "transparent"];
 
 /// A problem found while compiling a layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,11 +89,7 @@ pub struct Problem {
 
 impl std::fmt::Display for Problem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.path.is_empty() {
-            f.write_str(&self.message)
-        } else {
-            write!(f, "{}: {}", self.path, self.message)
-        }
+        if self.path.is_empty() { f.write_str(&self.message) } else { write!(f, "{}: {}", self.path, self.message) }
     }
 }
 
@@ -187,8 +163,7 @@ pub struct Compiled {
 
 impl Compiled {
     pub fn from_json5(text: &str) -> Result<Compiled, LayoutError> {
-        let layout: Layout =
-            json5::from_str(text).map_err(|e| LayoutError::Parse(e.to_string()))?;
+        let layout: Layout = json5::from_str(text).map_err(|e| LayoutError::Parse(e.to_string()))?;
         compile(layout)
     }
 }
@@ -207,20 +182,14 @@ impl Ctx {
         } else {
             format!("{} › {field}", self.path)
         };
-        self.problems.push(Problem {
-            path,
-            message: msg.into(),
-        });
+        self.problems.push(Problem { path, message: msg.into() });
     }
 
     fn color(&mut self, pal: &Palette, field: &str, spec: &str) -> Rgba {
         pal.resolve(spec).unwrap_or_else(|| {
             self.err(
                 field,
-                format!(
-                    "unknown color {spec:?} (use #rrggbb or one of: {})",
-                    THEME_COLOR_NAMES.join(", ")
-                ),
+                format!("unknown color {spec:?} (use #rrggbb or one of: {})", THEME_COLOR_NAMES.join(", ")),
             );
             Rgba::rgb(255, 0, 255)
         })
@@ -230,9 +199,7 @@ impl Ctx {
         let id = match SignalId::from_name(&b.signal) {
             Some(id) => id,
             None => {
-                let hint = suggest(&b.signal)
-                    .map(|s| format!(" — did you mean {s:?}?"))
-                    .unwrap_or_default();
+                let hint = suggest(&b.signal).map(|s| format!(" — did you mean {s:?}?")).unwrap_or_default();
                 self.err(field, format!("unknown signal {:?}{hint}", b.signal));
                 SignalId::Speed
             }
@@ -282,11 +249,7 @@ pub fn suggest(name: &str) -> Option<&'static str> {
         for (i, ca) in a.chars().enumerate() {
             let mut cur = vec![i + 1];
             for (j, cb) in b.iter().enumerate() {
-                cur.push(
-                    (prev[j] + usize::from(ca != *cb))
-                        .min(prev[j + 1] + 1)
-                        .min(cur[j] + 1),
-                );
+                cur.push((prev[j] + usize::from(ca != *cb)).min(prev[j + 1] + 1).min(cur[j] + 1));
             }
             prev = cur;
         }
@@ -301,10 +264,7 @@ pub fn suggest(name: &str) -> Option<&'static str> {
 }
 
 pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
-    let mut cx = Ctx {
-        problems: Vec::new(),
-        path: String::new(),
-    };
+    let mut cx = Ctx { problems: Vec::new(), path: String::new() };
     if !(layout.canvas.width > 0.0 && layout.canvas.height > 0.0) {
         cx.err("canvas", "width and height must be positive");
     }
@@ -322,10 +282,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
     };
     let mut hex = |field: &str, spec: &str, dflt: Rgba| {
         Rgba::parse_hex(spec).unwrap_or_else(|| {
-            cx.err(
-                &format!("theme.{field}"),
-                format!("theme colors must be hex (#rrggbb), got {spec:?}"),
-            );
+            cx.err(&format!("theme.{field}"), format!("theme colors must be hex (#rrggbb), got {spec:?}"));
             dflt
         })
     };
@@ -343,19 +300,13 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
     let bg = layout.background.clone();
     let background = (
         cx.color(&palette, "background.color", &bg.color),
-        bg.gradient_to
-            .as_deref()
-            .map(|g| cx.color(&palette, "background.gradient_to", g)),
+        bg.gradient_to.as_deref().map(|g| cx.color(&palette, "background.gradient_to", g)),
     );
 
     let mut ids = std::collections::HashSet::new();
     let mut widgets = Vec::with_capacity(layout.widgets.len());
     for (index, w) in layout.widgets.iter().enumerate() {
-        let id = if w.id.is_empty() {
-            format!("{}_{index}", w.kind.type_name())
-        } else {
-            w.id.clone()
-        };
+        let id = if w.id.is_empty() { format!("{}_{index}", w.kind.type_name()) } else { w.id.clone() };
         cx.path = format!("widgets[{index}] {id:?}");
         if !ids.insert(id.clone()) {
             cx.err("id", "duplicate widget id");
@@ -365,8 +316,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         }
         let s = &w.style;
         let mut pick = |field: &str, v: &Option<String>, d: Rgba| {
-            v.as_deref()
-                .map_or(d, |c| cx.color(&palette, &format!("style.{field}"), c))
+            v.as_deref().map_or(d, |c| cx.color(&palette, &format!("style.{field}"), c))
         };
         let colors = WidgetColors {
             ink: pick("ink", &s.ink, palette.ink),
@@ -458,8 +408,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                         .collect();
                     (0..n).map(|i| given[i.min(given.len() - 1)]).collect()
                 };
-                cw.extra_colors
-                    .push(cx.color(&palette, "flash_color", &l.flash_color));
+                cw.extra_colors.push(cx.color(&palette, "flash_color", &l.flash_color));
             }
             WidgetKind::Lamp(l) => {
                 cw.bindings.push(cx.binding("bind", &l.bind));
@@ -473,8 +422,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             }
             WidgetKind::GMeter(g) => {
                 cw.bindings.push(cx.binding("", &Binding::new("accel_lat")));
-                cw.bindings
-                    .push(cx.binding("", &Binding::new("accel_long")));
+                cw.bindings.push(cx.binding("", &Binding::new("accel_long")));
                 if g.max_g <= 0.0 {
                     cx.err("max_g", "must be positive");
                 }
@@ -487,11 +435,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     cw.bindings.push(cx.binding(&format!("signals[{i}]"), b));
                 }
                 cw.extra_colors = (0..cw.bindings.len())
-                    .map(|i| {
-                        p.colors.get(i).map_or(palette.ink, |c| {
-                            cx.color(&palette, &format!("colors[{i}]"), c)
-                        })
-                    })
+                    .map(|i| p.colors.get(i).map_or(palette.ink, |c| cx.color(&palette, &format!("colors[{i}]"), c)))
                     .collect();
             }
             WidgetKind::LapTimer(_) => {
@@ -504,11 +448,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     Ok(t) => cw.template = t,
                     Err(e) => cx.err("text", e),
                 }
-                cw.extra_colors.push(
-                    l.color
-                        .as_deref()
-                        .map_or(colors.ink, |c| cx.color(&palette, "color", c)),
-                );
+                cw.extra_colors.push(l.color.as_deref().map_or(colors.ink, |c| cx.color(&palette, "color", c)));
             }
             WidgetKind::Image(i) => {
                 if i.src.trim().is_empty() {
@@ -520,12 +460,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
     }
 
     if cx.problems.is_empty() {
-        Ok(Compiled {
-            layout,
-            palette,
-            background,
-            widgets,
-        })
+        Ok(Compiled { layout, palette, background, widgets })
     } else {
         Err(LayoutError::Invalid(cx.problems))
     }

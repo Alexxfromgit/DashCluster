@@ -27,10 +27,8 @@ pub struct Offscreen {
 pub fn install(width: u32, height: u32) -> anyhow::Result<Offscreen> {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     window.set_size(PhysicalSize::new(width, height));
-    slint::platform::set_platform(Box::new(OffscreenPlatform {
-        window: window.clone(),
-    }))
-    .map_err(|e| anyhow::anyhow!("set platform: {e}"))?;
+    slint::platform::set_platform(Box::new(OffscreenPlatform { window: window.clone() }))
+        .map_err(|e| anyhow::anyhow!("set platform: {e}"))?;
     Ok(Offscreen { window })
 }
 

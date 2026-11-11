@@ -1,0 +1,16 @@
+[package]
+name = "forza-fake"
+description = "Sends synthetic (or recorded) Forza Data Out packets over UDP, for testing without the game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+source-forza.workspace = true
+source-demo.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true

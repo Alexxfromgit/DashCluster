@@ -145,20 +145,13 @@ signals! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SignalSet(u128);
 
-const _: () = assert!(
-    SignalId::COUNT <= 128,
-    "SignalSet holds at most 128 signals"
-);
+const _: () = assert!(SignalId::COUNT <= 128, "SignalSet holds at most 128 signals");
 
 impl SignalSet {
     pub const EMPTY: SignalSet = SignalSet(0);
 
     pub fn all() -> SignalSet {
-        SignalSet(if SignalId::COUNT == 128 {
-            u128::MAX
-        } else {
-            (1u128 << SignalId::COUNT) - 1
-        })
+        SignalSet(if SignalId::COUNT == 128 { u128::MAX } else { (1u128 << SignalId::COUNT) - 1 })
     }
 
     pub fn of(ids: &[SignalId]) -> SignalSet {
@@ -186,10 +179,7 @@ impl SignalSet {
     }
 
     pub fn iter(self) -> impl Iterator<Item = SignalId> {
-        SignalId::ALL
-            .iter()
-            .copied()
-            .filter(move |&id| self.contains(id))
+        SignalId::ALL.iter().copied().filter(move |&id| self.contains(id))
     }
 }
 

@@ -15,10 +15,7 @@ pub struct SourceContext {
 
 impl SourceContext {
     pub fn new(bus: Arc<SignalBus>) -> Self {
-        SourceContext {
-            bus,
-            stop: Arc::new(AtomicBool::new(false)),
-        }
+        SourceContext { bus, stop: Arc::new(AtomicBool::new(false)) }
     }
 
     pub fn should_stop(&self) -> bool {
@@ -88,10 +85,7 @@ impl SourceRunner {
                 }
             })
             .expect("spawn source thread");
-        SourceRunner {
-            ctx,
-            handle: Some(handle),
-        }
+        SourceRunner { ctx, handle: Some(handle) }
     }
 
     pub fn stop(&mut self) {

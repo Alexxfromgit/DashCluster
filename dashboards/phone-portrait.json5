@@ -22,7 +22,7 @@
     { id: "pedals", type: "pedals", x: 470, y: 790, w: 220, h: 300 },
     { id: "fuel", type: "bar_gauge", x: 30, y: 1120, w: 660, h: 50, label: "FUEL", bind: "fuel", max: 100,
       zones: [ { to: 10, color: "danger" } ] },
-    { id: "water", type: "bar_gauge", x: 30, y: 1190, w: 660, h: 50, label: "WATER", bind: "coolant_temp",
-      min: 40, max: 130, zones: [ { from: 110, color: "danger" } ] },
+    { id: "boost", type: "bar_gauge", x: 30, y: 1190, w: 660, h: 50, label: "BOOST", bind: "boost",
+      min: 0, max: 1.5, format: { decimals: 2 } },
   ],
 }

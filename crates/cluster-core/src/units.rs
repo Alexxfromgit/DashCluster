@@ -115,11 +115,7 @@ impl UnitPrefs {
                 _ => v / 1000.0,
             },
             Quantity::Ratio | Quantity::SignedRatio => v * 100.0,
-            Quantity::EngineSpeed
-            | Quantity::Duration
-            | Quantity::Gear
-            | Quantity::Flag
-            | Quantity::Count => v,
+            Quantity::EngineSpeed | Quantity::Duration | Quantity::Gear | Quantity::Flag | Quantity::Count => v,
         }
     }
 
@@ -182,11 +178,7 @@ pub fn format_lap_time(seconds: f32) -> String {
     let s = (total_ms / 1000) % 60;
     let m = (total_ms / 60_000) % 60;
     let h = total_ms / 3_600_000;
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}.{ms:03}")
-    } else {
-        format!("{m}:{s:02}.{ms:03}")
-    }
+    if h > 0 { format!("{h}:{m:02}:{s:02}.{ms:03}") } else { format!("{m}:{s:02}.{ms:03}") }
 }
 
 /// Formats a gear value: -1 → "R", 0 → "N", n → "n".
@@ -216,10 +208,7 @@ mod tests {
         assert!(close(m.convert(Quantity::Pressure, 150.0), 1.5));
         assert!(close(i.convert(Quantity::Pressure, 100.0), 14.5038));
         assert!(close(i.convert(Quantity::Power, 745.6999), 1.0));
-        assert!(close(
-            m.convert(Quantity::Acceleration, STANDARD_GRAVITY),
-            1.0
-        ));
+        assert!(close(m.convert(Quantity::Acceleration, STANDARD_GRAVITY), 1.0));
         assert!(close(m.convert(Quantity::Ratio, 0.42), 42.0));
         assert!(close(i.convert(Quantity::Distance, 1609.344), 1.0));
     }
@@ -227,12 +216,7 @@ mod tests {
     #[test]
     fn to_base_inverts_convert() {
         let i = UnitPrefs::imperial();
-        for q in [
-            Quantity::Speed,
-            Quantity::Temperature,
-            Quantity::Pressure,
-            Quantity::Ratio,
-        ] {
+        for q in [Quantity::Speed, Quantity::Temperature, Quantity::Pressure, Quantity::Ratio] {
             assert!(close(i.to_base(q, i.convert(q, 12.5)), 12.5));
         }
     }

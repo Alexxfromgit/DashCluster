@@ -34,9 +34,9 @@
 
     { id: "fuel", type: "bar_gauge", x: 980, y: 450, w: 590, h: 40, label: "FUEL", bind: "fuel", max: 100,
       zones: [ { to: 10, color: "danger" } ] },
-    { id: "water", type: "bar_gauge", x: 980, y: 504, w: 590, h: 40, label: "WATER", bind: "coolant_temp",
-      min: 40, max: 130, zones: [ { from: 110, color: "danger" } ] },
-    { id: "abs", type: "lamp", x: 1290, y: 30, w: 130, h: 60, bind: "abs_active", icon: "ABS" },
-    { id: "tc", type: "lamp", x: 1440, y: 30, w: 130, h: 60, bind: "tc_active", icon: "TC" },
+    { id: "power", type: "bar_gauge", x: 980, y: 504, w: 590, h: 40, label: "POWER", bind: "power",
+      min: 0, max: 600 },
+    { id: "hb", type: "lamp", x: 1290, y: 30, w: 130, h: 60, bind: "handbrake", above: 10, icon: "HB", color: "danger" },
+    { id: "slip", type: "lamp", x: 1440, y: 30, w: 130, h: 60, bind: "slip_rr", above: 100, icon: "SLIP", blink: true },
   ],
 }

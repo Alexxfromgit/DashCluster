@@ -86,11 +86,7 @@ pub struct WidgetFrame {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplatePart {
     Text(String),
-    Signal {
-        id: SignalId,
-        style: FormatStyle,
-        decimals: u32,
-    },
+    Signal { id: SignalId, style: FormatStyle, decimals: u32 },
 }
 
 /// Parses `"LAP {lap_number} · {speed:1} km/h · {best_lap:time}"`. `{{`/`}}` escape braces.
@@ -131,19 +127,13 @@ pub fn parse_template(s: &str) -> Result<Vec<TemplatePart>, String> {
                     "onoff" => (FormatStyle::OnOff, 0),
                     d => (
                         FormatStyle::Number,
-                        d.parse().map_err(|_| {
-                            format!("bad format {d:?} (use a digit, time, gear or onoff)")
-                        })?,
+                        d.parse().map_err(|_| format!("bad format {d:?} (use a digit, time, gear or onoff)"))?,
                     ),
                 };
                 if !text.is_empty() {
                     parts.push(TemplatePart::Text(std::mem::take(&mut text)));
                 }
-                parts.push(TemplatePart::Signal {
-                    id,
-                    style,
-                    decimals,
-                });
+                parts.push(TemplatePart::Signal { id, style, decimals });
             }
             '}' => return Err(format!("unmatched '}}' in {s:?}")),
             c => text.push(c),
@@ -184,12 +174,7 @@ pub struct Evaluator {
 impl Evaluator {
     pub fn new(compiled: Compiled, units: UnitPrefs) -> Self {
         let n = compiled.widgets.len();
-        Evaluator {
-            compiled,
-            units,
-            smooth: vec![[None; 4]; n],
-            time: 0.0,
-        }
+        Evaluator { compiled, units, smooth: vec![[None; 4]; n], time: 0.0 }
     }
 
     pub fn compiled(&self) -> &Compiled {
@@ -206,8 +191,7 @@ impl Evaluator {
     }
 
     fn unit_differs(&self, q: Quantity) -> bool {
-        METRIC.convert(q, 1.0) != self.units.convert(q, 1.0)
-            || METRIC.convert(q, 0.0) != self.units.convert(q, 0.0)
+        METRIC.convert(q, 1.0) != self.units.convert(q, 1.0) || METRIC.convert(q, 0.0) != self.units.convert(q, 0.0)
     }
 
     /// A layout number (metric, after scale/offset) in the user's units.
@@ -224,11 +208,7 @@ impl Evaluator {
     fn shown(&self, b: &CBinding, snap: &Snapshot) -> Option<f32> {
         match snap.get(b.id) {
             Some(raw) => {
-                let conv = if b.convert {
-                    self.units.convert(b.id.quantity(), raw)
-                } else {
-                    raw
-                };
+                let conv = if b.convert { self.units.convert(b.id.quantity(), raw) } else { raw };
                 let v = conv * b.scale + b.offset;
                 Some(b.ceil_to.map_or(v, |c| (v / c).ceil() * c))
             }
@@ -247,13 +227,7 @@ impl Evaluator {
         let rel = w.bindings.first();
         w.zones
             .iter()
-            .filter_map(|z| {
-                Some((
-                    self.num(&z.from, rel, snap)?,
-                    self.num(&z.to, rel, snap)?,
-                    z.color,
-                ))
-            })
+            .filter_map(|z| Some((self.num(&z.from, rel, snap)?, self.num(&z.to, rel, snap)?, z.color)))
             .collect()
     }
 
@@ -262,10 +236,7 @@ impl Evaluator {
             return u.clone();
         }
         let q = b.id.quantity();
-        if b.scale == 1.0
-            && (b.convert || q == Quantity::EngineSpeed)
-            && f.style == FormatStyle::Number
-        {
+        if b.scale == 1.0 && (b.convert || q == Quantity::EngineSpeed) && f.style == FormatStyle::Number {
             self.units.unit_label(q).to_owned()
         } else {
             String::new()
@@ -313,16 +284,8 @@ impl Evaluator {
                     show_best: true,
                 };
                 let range = |s: &mut WidgetStatic| {
-                    let min = cw
-                        .nums
-                        .first()
-                        .and_then(|n| self.num(n, rel, snap))
-                        .unwrap_or(0.0);
-                    let max = cw
-                        .nums
-                        .get(1)
-                        .and_then(|n| self.num(n, rel, snap))
-                        .unwrap_or(min + 1.0);
+                    let min = cw.nums.first().and_then(|n| self.num(n, rel, snap)).unwrap_or(0.0);
+                    let max = cw.nums.get(1).and_then(|n| self.num(n, rel, snap)).unwrap_or(min + 1.0);
                     s.min = min;
                     s.max = if max > min { max } else { min + 1.0 };
                 };
@@ -336,8 +299,7 @@ impl Evaluator {
                         s.sweep = g.sweep.clamp(1.0, 360.0);
                         s.caption = g.caption.clone();
                         // Re-round a fixed range that was converted to other units.
-                        if let (Some(b), [CNum::Fixed(_), CNum::Fixed(_)]) =
-                            (rel, cw.nums.as_slice())
+                        if let (Some(b), [CNum::Fixed(_), CNum::Fixed(_)]) = (rel, cw.nums.as_slice())
                             && b.convert
                             && self.unit_differs(b.id.quantity())
                         {
@@ -360,17 +322,13 @@ impl Evaluator {
                         s.vertical = g.vertical;
                         s.label = g.label.clone();
                         s.show_value = g.show_value;
-                        s.unit = rel
-                            .map(|b| self.unit_label(b, &g.format))
-                            .unwrap_or_default();
+                        s.unit = rel.map(|b| self.unit_label(b, &g.format)).unwrap_or_default();
                     }
                     WidgetKind::Readout(r) => {
                         s.kind = WidgetType::Readout;
                         s.label = r.label.clone();
                         s.align = r.align;
-                        s.unit = rel
-                            .map(|b| self.unit_label(b, &r.format))
-                            .unwrap_or_default();
+                        s.unit = rel.map(|b| self.unit_label(b, &r.format)).unwrap_or_default();
                     }
                     WidgetKind::Gear(_) => s.kind = WidgetType::Gear,
                     WidgetKind::ShiftLights(_) => {
@@ -387,9 +345,7 @@ impl Evaluator {
                     WidgetKind::TyreQuad(t) => {
                         s.kind = WidgetType::TyreQuad;
                         s.label = t.label.clone();
-                        s.unit = rel
-                            .map(|b| self.unit_label(b, &t.format))
-                            .unwrap_or_default();
+                        s.unit = rel.map(|b| self.unit_label(b, &t.format)).unwrap_or_default();
                     }
                     WidgetKind::GMeter(g) => {
                         s.kind = WidgetType::GMeter;
@@ -426,9 +382,7 @@ impl Evaluator {
     fn smoothed(&mut self, w: usize, slot: usize, target: f32, tau: f32, dt: f32) -> f32 {
         let cell = &mut self.smooth[w][slot];
         let v = match *cell {
-            Some(prev) if tau > 0.0 && dt > 0.0 => {
-                prev + (target - prev) * (1.0 - (-dt / tau).exp())
-            }
+            Some(prev) if tau > 0.0 && dt > 0.0 => prev + (target - prev) * (1.0 - (-dt / tau).exp()),
             _ => target,
         };
         *cell = Some(v);
@@ -440,13 +394,10 @@ impl Evaluator {
         match f.style {
             FormatStyle::Time => raw.map_or_else(|| format_lap_time(f32::NAN), format_lap_time),
             FormatStyle::Gear => raw.map_or_else(|| "-".into(), format_gear),
-            FormatStyle::OnOff => raw.map_or_else(
-                || "--".into(),
-                |v| if v > 0.5 { "ON" } else { "OFF" }.into(),
-            ),
-            FormatStyle::Number => self
-                .shown(b, snap)
-                .map_or_else(|| "--".into(), |v| format!("{:.*}", f.decimals as usize, v)),
+            FormatStyle::OnOff => raw.map_or_else(|| "--".into(), |v| if v > 0.5 { "ON" } else { "OFF" }.into()),
+            FormatStyle::Number => {
+                self.shown(b, snap).map_or_else(|| "--".into(), |v| format!("{:.*}", f.decimals as usize, v))
+            }
         }
     }
 
@@ -465,10 +416,7 @@ impl Evaluator {
             let main = b0.and_then(|b| self.shown(&b, snap));
             f.valid = main.is_some();
             let zone_color = |zones: &[(f32, f32, Rgba)], v: f32, d: Rgba| {
-                zones
-                    .iter()
-                    .find(|(a, b, _)| v >= *a && v < *b)
-                    .map_or(d, |z| z.2)
+                zones.iter().find(|(a, b, _)| v >= *a && v < *b).map_or(d, |z| z.2)
             };
             match &kind {
                 WidgetKind::AnalogGauge(g) => {
@@ -486,16 +434,8 @@ impl Evaluator {
                 WidgetKind::BarGauge(g) => {
                     let b = b0.expect("bar binding");
                     let v = main.unwrap_or(0.0);
-                    let min = cw
-                        .nums
-                        .first()
-                        .and_then(|n| self.num(n, Some(&b), snap))
-                        .unwrap_or(0.0);
-                    let max = cw
-                        .nums
-                        .get(1)
-                        .and_then(|n| self.num(n, Some(&b), snap))
-                        .unwrap_or(min + 1.0);
+                    let min = cw.nums.first().and_then(|n| self.num(n, Some(&b), snap)).unwrap_or(0.0);
+                    let max = cw.nums.get(1).and_then(|n| self.num(n, Some(&b), snap)).unwrap_or(min + 1.0);
                     let frac = ((v - min) / (max - min).max(f32::EPSILON)).clamp(0.0, 1.0);
                     f.slots[0].value = self.smoothed(wi, 0, frac, b.smoothing, dt);
                     f.slots[0].text = self.format(&b, &g.format, snap);
@@ -505,9 +445,8 @@ impl Evaluator {
                     let b = b0.expect("readout binding");
                     f.slots[0].value = main.unwrap_or(0.0);
                     f.slots[0].text = self.format(&b, &r.format, snap);
-                    f.slots[0].color = main.map_or(cw.colors.muted, |v| {
-                        zone_color(&self.zones(&cw, snap), v, cw.colors.ink)
-                    });
+                    f.slots[0].color =
+                        main.map_or(cw.colors.muted, |v| zone_color(&self.zones(&cw, snap), v, cw.colors.ink));
                 }
                 WidgetKind::Gear(_) => {
                     let b = b0.expect("gear binding");
@@ -528,8 +467,7 @@ impl Evaluator {
                             f.on = true;
                             f.slots[0].value = if blink_fast { 1.0 } else { 0.0 };
                         } else {
-                            f.slots[0].value =
-                                ((v - s) / (l - s).max(f32::EPSILON)).clamp(0.0, 1.0);
+                            f.slots[0].value = ((v - s) / (l - s).max(f32::EPSILON)).clamp(0.0, 1.0);
                         }
                     } else {
                         f.valid = false;
@@ -549,8 +487,7 @@ impl Evaluator {
                         let v = self.shown(b, snap);
                         f.slots[i].value = v.unwrap_or(0.0);
                         f.slots[i].text = self.format(b, &t.format, snap);
-                        f.slots[i].color =
-                            v.map_or(cw.colors.muted, |v| zone_color(&zones, v, cw.colors.ink));
+                        f.slots[i].color = v.map_or(cw.colors.muted, |v| zone_color(&zones, v, cw.colors.ink));
                     }
                 }
                 WidgetKind::GMeter(_) => {
@@ -572,17 +509,13 @@ impl Evaluator {
                     }
                 }
                 WidgetKind::LapTimer(_) => {
-                    let t = |id| {
-                        snap.get(id)
-                            .map_or_else(|| format_lap_time(f32::NAN), format_lap_time)
-                    };
+                    let t = |id| snap.get(id).map_or_else(|| format_lap_time(f32::NAN), format_lap_time);
                     f.valid = snap.get(SignalId::LapTime).is_some();
                     f.slots[0].text = t(SignalId::LapTime);
                     f.slots[1].text = t(SignalId::LastLap);
                     f.slots[2].text = t(SignalId::BestLap);
-                    f.slots[3].text = snap
-                        .get(SignalId::LapNumber)
-                        .map_or_else(|| "LAP -".into(), |n| format!("LAP {}", n as i64));
+                    f.slots[3].text =
+                        snap.get(SignalId::LapNumber).map_or_else(|| "LAP -".into(), |n| format!("LAP {}", n as i64));
                 }
                 WidgetKind::Label(_) => {
                     f.valid = true;
@@ -601,11 +534,7 @@ impl Evaluator {
         for p in parts {
             match p {
                 TemplatePart::Text(t) => s.push_str(t),
-                TemplatePart::Signal {
-                    id,
-                    style,
-                    decimals,
-                } => {
+                TemplatePart::Signal { id, style, decimals } => {
                     let b = CBinding {
                         id: *id,
                         scale: 1.0,
@@ -615,15 +544,7 @@ impl Evaluator {
                         convert: true,
                         fallback: None,
                     };
-                    s.push_str(&self.format(
-                        &b,
-                        &Format {
-                            style: *style,
-                            decimals: *decimals,
-                            unit: None,
-                        },
-                        snap,
-                    ));
+                    s.push_str(&self.format(&b, &Format { style: *style, decimals: *decimals, unit: None }, snap));
                 }
             }
         }
@@ -637,12 +558,7 @@ fn short_label(id: SignalId) -> String {
         SignalId::Brake => "BRK".into(),
         SignalId::Clutch => "CLU".into(),
         SignalId::Handbrake => "HB".into(),
-        other => other
-            .label()
-            .chars()
-            .take(3)
-            .collect::<String>()
-            .to_uppercase(),
+        other => other.label().chars().take(3).collect::<String>().to_uppercase(),
     }
 }
 
@@ -672,11 +588,7 @@ pub fn nice_range(min: f32, max: f32, ticks: u32) -> (f32, u32) {
     let span = (max - min).max(f32::EPSILON);
     let rough = span / ticks.max(1) as f32;
     let mag = 10f32.powf(rough.log10().floor());
-    let step = [1.0, 2.0, 2.5, 5.0, 10.0]
-        .iter()
-        .map(|m| m * mag)
-        .find(|s| *s >= rough)
-        .unwrap_or(10.0 * mag);
+    let step = [1.0, 2.0, 2.5, 5.0, 10.0].iter().map(|m| m * mag).find(|s| *s >= rough).unwrap_or(10.0 * mag);
     let n = (span / step).ceil().max(1.0);
     (min + n * step, n as u32)
 }
@@ -725,21 +637,14 @@ mod tests {
         let c = Compiled::from_json5(SAMPLE).unwrap();
         let mut e = Evaluator::new(c, UnitPrefs::default());
         let st = e.statics(&snap());
-        assert_eq!(
-            st[0].max, 8.0,
-            "tach max rounds rpm_max up to whole thousands"
-        );
+        assert_eq!(st[0].max, 8.0, "tach max rounds rpm_max up to whole thousands");
         assert!((st[0].zones[0].0 - 7.22).abs() < 0.01);
         assert_eq!(st[1].max, 280.0);
         assert_eq!(st[1].caption, "km/h");
         let fr = e.frame(&snap(), 1.0 / 60.0);
         assert_eq!(fr[0].slots[0].text, "3");
         assert!((fr[0].slots[0].value - 7.4).abs() < 1e-3);
-        assert_eq!(
-            fr[0].slots[0].color,
-            e.compiled().palette.danger,
-            "needle in red zone"
-        );
+        assert_eq!(fr[0].slots[0].color, e.compiled().palette.danger, "needle in red zone");
         assert!((fr[1].slots[0].value - 90.0).abs() < 1e-3);
         assert!((fr[2].slots[0].value - 0.8125).abs() < 1e-3);
         assert_eq!(fr[2].slots[0].color, e.compiled().palette.danger);
@@ -794,14 +699,8 @@ mod tests {
 
     #[test]
     fn templates() {
-        assert!(
-            parse_template("{{literal}}").unwrap() == vec![TemplatePart::Text("{literal}".into())]
-        );
-        assert!(
-            parse_template("{rmp}")
-                .unwrap_err()
-                .contains("did you mean \"rpm\"")
-        );
+        assert!(parse_template("{{literal}}").unwrap() == vec![TemplatePart::Text("{literal}".into())]);
+        assert!(parse_template("{rmp}").unwrap_err().contains("did you mean \"rpm\""));
         assert!(parse_template("{rpm").is_err());
         assert!(parse_template("{speed:x}").is_err());
     }

@@ -56,10 +56,7 @@ pub struct SignalBus {
 impl Default for SignalBus {
     fn default() -> Self {
         SignalBus {
-            latest: ArcSwap::from_pointee(Stamped {
-                snapshot: Snapshot::new(),
-                at: Instant::now(),
-            }),
+            latest: ArcSwap::from_pointee(Stamped { snapshot: Snapshot::new(), at: Instant::now() }),
             status: ArcSwap::from_pointee(SourceStatus::default()),
             publishes: AtomicU64::new(0),
         }
@@ -72,10 +69,7 @@ impl SignalBus {
     }
 
     pub fn publish(&self, snapshot: Snapshot) {
-        self.latest.store(Arc::new(Stamped {
-            snapshot,
-            at: Instant::now(),
-        }));
+        self.latest.store(Arc::new(Stamped { snapshot, at: Instant::now() }));
         self.publishes.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -111,10 +105,7 @@ impl SignalBus {
 
     /// Clears the latest frame, e.g. when switching sources so stale values vanish.
     pub fn reset(&self) {
-        self.latest.store(Arc::new(Stamped {
-            snapshot: Snapshot::new(),
-            at: Instant::now(),
-        }));
+        self.latest.store(Arc::new(Stamped { snapshot: Snapshot::new(), at: Instant::now() }));
         self.publishes.store(0, Ordering::Relaxed);
     }
 }
