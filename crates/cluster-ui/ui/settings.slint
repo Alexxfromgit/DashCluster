@@ -1,0 +1,248 @@
+// Settings panel and the Forza setup guide.
+
+import { Button, LineEdit, CheckBox, ComboBox, ScrollView, AboutSlint } from "std-widgets.slint";
+
+export struct UiSettings {
+    // 0 forza, 1 demo, 2 network hub
+    source: int,
+    forza-port: string,
+    hub-address: string,
+    hub-enabled: bool,
+    hub-port: string,
+    // indices into the option lists below
+    speed: int,
+    temperature: int,
+    pressure: int,
+    power: int,
+    torque: int,
+    start-fullscreen: bool,
+    always-on-top: bool,
+}
+
+component Row inherits HorizontalLayout {
+    in property <string> label;
+    spacing: 10px;
+    Text { text: root.label; color: #c9d1d9; font-size: 13px; width: 150px; vertical-alignment: center; }
+}
+
+component Section inherits Text {
+    color: #8b96a5;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+component Card inherits Rectangle {
+    border-radius: 14px;
+    background: #10161f;
+    border-width: 1px;
+    border-color: #ffffff22;
+    drop-shadow-blur: 24px;
+    drop-shadow-color: #00000099;
+}
+
+export component SettingsPanel inherits Rectangle {
+    in property <UiSettings> initial;
+    in property <string> message;
+    callback apply(UiSettings);
+    callback cancel();
+    callback show-guide();
+
+    property <UiSettings> s: root.initial;
+
+    background: #000000b3;
+    TouchArea { }
+    Card {
+        width: min(root.width - 32px, 560px);
+        height: min(root.height - 32px, 680px);
+        VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            Text { text: "Settings"; color: #fff; font-size: 22px; font-weight: 700; }
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 10px;
+                    alignment: start;
+                    Section { text: "TELEMETRY"; }
+                    Row {
+                        label: "Source";
+                        ComboBox {
+                            model: ["Forza (Data Out)", "Demo car", "Another DashCluster (network hub)"];
+                            current-index: root.s.source;
+                            selected => { root.s.source = self.current-index; }
+                        }
+                    }
+                    if root.s.source == 0: Row {
+                        label: "Forza Data Out port";
+                        LineEdit { text: root.s.forza-port; input-type: number; edited(t) => { root.s.forza-port = t; } }
+                    }
+                    if root.s.source == 2: Row {
+                        label: "Hub address";
+                        LineEdit {
+                            text: root.s.hub-address;
+                            placeholder-text: "automatic, or 192.168.1.20:5380";
+                            edited(t) => { root.s.hub-address = t; }
+                        }
+                    }
+                    Section { text: "PHONES AND OTHER SCREENS"; }
+                    Row {
+                        label: "Share telemetry";
+                        CheckBox {
+                            text: "Run the hub (phone browser, other computers)";
+                            checked: root.s.hub-enabled;
+                            toggled => { root.s.hub-enabled = self.checked; }
+                        }
+                    }
+                    if root.s.hub-enabled: Row {
+                        label: "Hub port";
+                        LineEdit { text: root.s.hub-port; input-type: number; edited(t) => { root.s.hub-port = t; } }
+                    }
+                    Section { text: "UNITS"; }
+                    Row {
+                        label: "Speed";
+                        ComboBox { model: ["km/h", "mph", "m/s"]; current-index: root.s.speed; selected => { root.s.speed = self.current-index; } }
+                    }
+                    Row {
+                        label: "Temperature";
+                        ComboBox { model: ["°C", "°F"]; current-index: root.s.temperature; selected => { root.s.temperature = self.current-index; } }
+                    }
+                    Row {
+                        label: "Pressure";
+                        ComboBox { model: ["bar", "psi", "kPa"]; current-index: root.s.pressure; selected => { root.s.pressure = self.current-index; } }
+                    }
+                    Row {
+                        label: "Power";
+                        ComboBox { model: ["kW", "hp", "PS"]; current-index: root.s.power; selected => { root.s.power = self.current-index; } }
+                    }
+                    Row {
+                        label: "Torque";
+                        ComboBox { model: ["N·m", "lb·ft"]; current-index: root.s.torque; selected => { root.s.torque = self.current-index; } }
+                    }
+                    Section { text: "WINDOW"; }
+                    Row {
+                        label: "On start";
+                        CheckBox { text: "Open fullscreen"; checked: root.s.start-fullscreen; toggled => { root.s.start-fullscreen = self.checked; } }
+                    }
+                    Row {
+                        label: "Stacking";
+                        CheckBox { text: "Always on top"; checked: root.s.always-on-top; toggled => { root.s.always-on-top = self.checked; } }
+                    }
+                    Text {
+                        text: "Tip: drag the window to the screen you want, then press F for fullscreen.";
+                        color: #8b96a5;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    Section { text: "ABOUT"; }
+                    AboutSlint { max-height: 120px; }
+                }
+            }
+            if root.message != "": Text { text: root.message; color: #ffb4ab; font-size: 12px; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 8px;
+                Button { text: "Setup guide"; clicked => { root.show-guide(); } }
+                Rectangle { horizontal-stretch: 1; }
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: "Apply"; primary: true; clicked => { root.apply(root.s); } }
+            }
+        }
+    }
+}
+
+component Step inherits HorizontalLayout {
+    in property <string> n;
+    in property <string> title;
+    in property <string> body;
+    spacing: 12px;
+    Rectangle {
+        width: 28px;
+        height: 28px;
+        border-radius: 14px;
+        background: #2f81f7;
+        Text { text: root.n; color: #fff; font-weight: 700; font-size: 14px; }
+    }
+    VerticalLayout {
+        spacing: 2px;
+        Text { text: root.title; color: #fff; font-size: 15px; font-weight: 700; wrap: word-wrap; }
+        Text { text: root.body; color: #c9d1d9; font-size: 13px; wrap: word-wrap; }
+    }
+}
+
+export component SetupGuide inherits Rectangle {
+    in property <string> lan-ip;
+    in property <string> forza-port;
+    in property <string> hub-url;
+    callback close();
+
+    background: #000000b3;
+    TouchArea { }
+    Card {
+        width: min(root.width - 32px, 680px);
+        height: min(root.height - 32px, 720px);
+        VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+            Text { text: "Connect Forza Horizon 5"; color: #fff; font-size: 22px; font-weight: 700; }
+            ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 16px;
+                    alignment: start;
+                    Step {
+                        n: "1";
+                        title: "Turn on Data Out in the game";
+                        body: "Forza Horizon 5 → Settings → HUD and Gameplay → Data Out: ON.";
+                    }
+                    Step {
+                        n: "2";
+                        title: "Send it to this computer";
+                        body: "Data Out IP Address: " + root.lan-ip + "\nData Out IP Port: " + root.forza-port
+                            + "\nIf the game runs on another PC, both must be on the same network.";
+                    }
+                    Step {
+                        n: "3";
+                        title: "Game and DashCluster on the same Windows PC?";
+                        body: "The Microsoft Store / Xbox app version of Forza can't send to its own PC until you allow it once. Run this in PowerShell as administrator (select it and copy):";
+                    }
+                    HorizontalLayout {
+                        padding-left: 40px;
+                        LineEdit {
+                            read-only: true;
+                            font-size: 12px;
+                            text: "Get-AppxPackage *Forza* | % { CheckNetIsolation LoopbackExempt -a -n=\"$($_.PackageFamilyName)\" }";
+                        }
+                    }
+                    HorizontalLayout {
+                        padding-left: 40px;
+                        Text {
+                            text: "Then use 127.0.0.1 as the Data Out IP Address. Not needed when the dashboard runs on a different computer.";
+                            color: #c9d1d9;
+                            font-size: 13px;
+                            wrap: word-wrap;
+                        }
+                    }
+                    Step {
+                        n: "4";
+                        title: "Allow network access";
+                        body: "When Windows or macOS asks whether DashCluster may use the network, allow it on private networks — otherwise no packets arrive.";
+                    }
+                    Step {
+                        n: "5";
+                        title: "Add your phone";
+                        body: "Press Q here and scan the QR code, or open " + root.hub-url + " on the phone (same Wi-Fi). Tap the left/right edge to change dashboards, the middle for fullscreen. On iPhone, Share → Add to Home Screen gives a full-screen app.";
+                    }
+                    Step {
+                        n: "6";
+                        title: "Show it on a second computer too";
+                        body: "Run DashCluster on the other computer and choose Settings → Source → Another DashCluster. It finds this one automatically.";
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+                Button { text: "Got it"; primary: true; clicked => { root.close(); } }
+            }
+        }
+    }
+}

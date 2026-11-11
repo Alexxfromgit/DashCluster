@@ -1,6 +1,10 @@
+// Release builds on Windows are GUI apps (no console window).
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+
 mod app;
 mod editor;
 mod library;
+mod settings;
 mod sources;
 
 use app::{App, bind_view};
@@ -26,14 +30,16 @@ struct Cli {
     /// Extra dashboard files or folders to load (hot-reloaded on save).
     #[arg(long = "dashboards", value_name = "PATH", global = true)]
     dashboards: Vec<PathBuf>,
-    #[arg(long, value_enum, default_value_t = Units::Metric, global = true)]
-    units: Units,
-    /// Where telemetry comes from. Press D in the app to toggle the demo car.
-    #[arg(long, value_enum, default_value_t = Source::Forza, global = true)]
-    source: Source,
+    /// Display units (default: from Settings).
+    #[arg(long, value_enum, global = true)]
+    units: Option<Units>,
+    /// Where telemetry comes from (default: from Settings, initially Forza).
+    /// Press D in the app to toggle the demo car.
+    #[arg(long, value_enum, global = true)]
+    source: Option<Source>,
     /// UDP port Forza sends to (Forza: Settings → HUD and Gameplay → Data Out IP Port).
-    #[arg(long, default_value_t = source_forza::DEFAULT_PORT, global = true)]
-    port: u16,
+    #[arg(long, global = true)]
+    port: Option<u16>,
     /// Record raw Forza packets to this .ctlog file.
     #[arg(long, value_name = "FILE", global = true)]
     record: Option<PathBuf>,
@@ -50,8 +56,8 @@ struct Cli {
     #[arg(long, value_name = "ADDR", global = true)]
     hub: Option<String>,
     /// Port for this app's hub (phones and other displays connect here).
-    #[arg(long, default_value_t = cluster_net::DEFAULT_PORT, global = true)]
-    hub_port: u16,
+    #[arg(long, global = true)]
+    hub_port: Option<u16>,
     /// Don't run a hub (no phone/network displays).
     #[arg(long, global = true)]
     no_hub: bool,
@@ -111,11 +117,41 @@ enum Command {
         /// Image height (default: follows the dashboard's aspect ratio).
         #[arg(long)]
         height: Option<u32>,
+        /// Also show an overlay: settings, guide or qr.
+        #[arg(long)]
+        overlay: Option<String>,
     },
 }
 
+/// Saved settings with this run's command-line overrides applied.
+fn effective_settings(cli: &Cli, saved: &settings::Settings) -> settings::Settings {
+    let mut s = saved.clone();
+    if let Some(u) = cli.units {
+        s.units = u.prefs();
+    }
+    match cli.source {
+        Some(Source::Forza) => s.source = "forza".into(),
+        Some(Source::Demo) => s.source = "demo".into(),
+        Some(Source::Hub) => {
+            s.source = "hub".into();
+            s.hub_address = cli.hub.clone().unwrap_or_default();
+        }
+        Some(Source::Replay) | None => {}
+    }
+    if let Some(p) = cli.port {
+        s.forza_port = p;
+    }
+    if let Some(p) = cli.hub_port {
+        s.hub_port = p;
+    }
+    if cli.no_hub {
+        s.hub_enabled = false;
+    }
+    s
+}
+
 fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
-    Ok(match cli.source {
+    Ok(match cli.source.unwrap_or(Source::Forza) {
         Source::Forza => SourceKind::Forza,
         Source::Demo => SourceKind::Demo,
         Source::Replay => SourceKind::Replay(
@@ -127,16 +163,16 @@ fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
 
 fn source_config(cli: &Cli) -> SourceConfig {
     SourceConfig {
-        forza_port: cli.port,
+        forza_port: cli.port.unwrap_or(source_forza::DEFAULT_PORT),
         record: cli.record.clone(),
         forward: cli.forward.clone(),
         replay_speed: cli.replay_speed,
-        own_hub_port: (!cli.no_hub).then_some(cli.hub_port),
+        own_hub_port: (!cli.no_hub).then_some(cli.hub_port.unwrap_or(cluster_net::DEFAULT_PORT)),
     }
 }
 
 /// Renders a QR code for `text` as an image.
-fn qr_image(text: &str) -> slint::Image {
+pub(crate) fn qr_image(text: &str) -> slint::Image {
     let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else { return slint::Image::default() };
     let n = code.width();
     let colors = code.to_colors();
@@ -169,6 +205,7 @@ fn library(cli: &Cli) -> anyhow::Result<Library> {
     Ok(lib)
 }
 
+#[allow(clippy::too_many_arguments)] // mirrors the CLI subcommand's flags
 fn snapshot(
     cli: &Cli,
     out: &std::path::Path,
@@ -177,6 +214,7 @@ fn snapshot(
     live: bool,
     edit: Option<&str>,
     height: Option<u32>,
+    overlay: Option<&str>,
 ) -> anyhow::Result<()> {
     let lib = library(cli)?;
     let (compiled, base) = lib.current().load()?;
@@ -184,7 +222,7 @@ fn snapshot(
     let height = height.unwrap_or((width as f32 * ch / cw).round() as u32);
     let off = cluster_ui::offscreen::install(width, height)?;
     let ui = MainWindow::new()?;
-    let mut view = DashboardView::new(compiled, cli.units.prefs(), base);
+    let mut view = DashboardView::new(compiled, cli.units.unwrap_or(Units::Metric).prefs(), base);
     let dt = 1.0 / 60.0;
     let snap = if live {
         let bus = SignalBus::new();
@@ -208,6 +246,39 @@ fn snapshot(
     view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
     ui.set_show_status(false);
+    match overlay {
+        Some("settings") => {
+            let s = settings::Settings { units: cluster_core::UnitPrefs::imperial(), ..Default::default() };
+            ui.set_ui_settings(cluster_ui::UiSettings {
+                source: 0,
+                forza_port: s.forza_port.to_string().into(),
+                hub_address: "".into(),
+                hub_enabled: true,
+                hub_port: s.hub_port.to_string().into(),
+                speed: 1,
+                temperature: 1,
+                pressure: 1,
+                power: 1,
+                torque: 1,
+                start_fullscreen: false,
+                always_on_top: true,
+            });
+            ui.set_show_settings(true);
+        }
+        Some("guide") => {
+            ui.set_lan_ip("192.168.1.122".into());
+            ui.set_forza_port_text("5300".into());
+            ui.set_qr_url("http://192.168.1.122:5380/".into());
+            ui.set_show_guide(true);
+        }
+        Some("qr") => {
+            let url = "http://192.168.1.122:5380/";
+            ui.set_qr_url(url.into());
+            ui.set_qr_image(qr_image(url));
+            ui.set_show_qr(true);
+        }
+        _ => {}
+    }
     if let Some(id) = edit {
         let text = lib.current().text()?;
         let doc = cluster_layout::edit::Doc::new(json5::from_str(&text)?);
@@ -237,36 +308,60 @@ fn snapshot(
 }
 
 fn run(cli: &Cli) -> anyhow::Result<()> {
+    let saved = settings::Settings::load();
+    let settings = effective_settings(cli, &saved);
     let bus = SignalBus::new();
-    let sources = Rc::new(RefCell::new(Sources::new(bus.clone(), source_config(cli), source_kind(cli)?)));
 
     let ui = MainWindow::new()?;
-    let lib = library(cli)?;
-    let hub = if cli.no_hub {
-        None
-    } else {
-        let config = cluster_net::HubConfig { port: cli.hub_port, web_dir: cli.web_dir.clone(), ..Default::default() };
-        match cluster_net::Hub::start(bus.clone(), cluster_net::Catalog::default(), config) {
-            Ok(h) => {
-                log::info!("phones can open {}", h.url());
-                Some(h)
-            }
-            Err(e) => {
-                log::warn!("hub not started: {e:#}");
-                None
-            }
-        }
-    };
-    if let Some(h) = &hub {
-        let url = h.url();
-        ui.set_qr_url(url.clone().into());
-        ui.set_qr_image(qr_image(&url));
-    } else {
-        ui.set_qr_url("Hub is off".into());
-        ui.set_qr_detail("Start without --no-hub, or check that the port is free.".into());
+    let mut lib = library(cli)?;
+    if cli.dashboard.is_none() && cli.dashboards.is_empty() && !saved.dashboard.is_empty() {
+        lib.select(&saved.dashboard);
     }
-    let app = Rc::new(RefCell::new(App::new(&ui, lib, cli.units.prefs(), hub)));
-    app.borrow_mut().load_current();
+    let config = SourceConfig {
+        forza_port: settings.forza_port,
+        record: cli.record.clone(),
+        forward: cli.forward.clone(),
+        replay_speed: cli.replay_speed,
+        own_hub_port: settings.hub_enabled.then_some(settings.hub_port),
+    };
+    let first_run = !saved.setup_seen;
+    ui.set_on_top(settings.always_on_top);
+    ui.set_show_status(settings.show_status);
+    ui.set_forza_port_text(settings.forza_port.to_string().into());
+    ui.set_lan_ip(
+        source_forza::local_ip().map_or_else(|| "this computer's IP address".into(), |ip| ip.to_string()).into(),
+    );
+    let start_fullscreen = settings.start_fullscreen;
+    let app = Rc::new(RefCell::new(App::new(
+        &ui,
+        lib,
+        settings,
+        saved,
+        Sources::new(bus.clone(), config, SourceKind::Demo),
+        bus.clone(),
+        cli.web_dir.clone(),
+    )));
+    {
+        let mut a = app.borrow_mut();
+        let kind = match cli.source {
+            Some(Source::Replay) => source_kind(cli)?,
+            _ => a.source_kind(),
+        };
+        a.sources.start(kind);
+        a.restart_hub();
+        a.load_current();
+    }
+    if first_run {
+        ui.set_show_guide(true);
+    }
+    if start_fullscreen {
+        let weak = ui.as_weak();
+        slint::Timer::single_shot(Duration::from_millis(50), move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.window().set_fullscreen(true);
+            }
+        });
+    }
 
     // Small helper: run `f` on the app from a callback.
     macro_rules! on {
@@ -287,16 +382,18 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         on!(on_toggle_units, |a| {
             a.units = if a.units == UnitPrefs::default() { UnitPrefs::imperial() } else { UnitPrefs::default() };
             let units = a.units;
+            a.settings.units = units;
+            a.saved_settings.units = units;
+            a.saved_settings.save();
             a.view.set_units(units, &bus.latest().snapshot);
             a.publish_catalog();
             a.toast(if units == UnitPrefs::default() { "Units: metric" } else { "Units: imperial" });
         });
     }
     {
-        let sources = sources.clone();
         let bus = bus.clone();
         on!(on_toggle_demo, |a| {
-            sources.borrow_mut().toggle_demo();
+            a.sources.toggle_demo();
             let name = bus.status().source.clone();
             a.toast(&name);
         });
@@ -312,7 +409,21 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     });
     on!(on_toggle_status, |a| {
         let ui = a.ui();
-        ui.set_show_status(!ui.get_show_status());
+        let show = !ui.get_show_status();
+        ui.set_show_status(show);
+        a.saved_settings.show_status = show;
+        a.saved_settings.save();
+    });
+    on!(on_open_settings, |a| a.open_settings());
+    on!(on_apply_settings, |a, v| a.apply_ui_settings(v));
+    on!(on_close_settings, |a| a.ui().set_show_settings(false));
+    on!(on_open_guide, |a| a.ui().set_show_guide(true));
+    on!(on_close_guide, |a| {
+        a.ui().set_show_guide(false);
+        if !a.saved_settings.setup_seen {
+            a.saved_settings.setup_seen = true;
+            a.saved_settings.save();
+        }
     });
 
     // Editor
@@ -411,7 +522,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             ui.set_stale(!editing && (stale || paused));
             ui.set_status_text(
                 format!(
-                    "{} · {} · {} · {}/{}{}  —  ←/→ dashboards · E edit · D demo · Q phone · U units · F fullscreen · S hide",
+                    "{} · {} · {} · {}/{}{}  —  ←/→ dashboards · E edit · P settings · H help · D demo · Q phone · U units · F fullscreen",
                     st.source,
                     state,
                     a.view.name(),
@@ -432,7 +543,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         });
     }
     ui.run()?;
-    drop(sources);
+    drop(app);
     Ok(())
 }
 
@@ -440,8 +551,8 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Snapshot { out, seconds, width, live, edit, height }) => {
-            snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height)
+        Some(Command::Snapshot { out, seconds, width, live, edit, height, overlay }) => {
+            snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height, overlay.as_deref())
         }
         None => run(&cli),
     }

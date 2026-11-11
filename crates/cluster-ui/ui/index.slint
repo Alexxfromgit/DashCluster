@@ -1,7 +1,8 @@
 import { Dashboard, WType, WZone, WStatic, WFrame } from "dashboard.slint";
 import { Toolbar, WidgetPalette, Inspector, EditOverlay, PropRow, PaletteItem } from "editor.slint";
+import { SettingsPanel, SetupGuide, UiSettings } from "settings.slint";
 import { Palette } from "std-widgets.slint";
-export { WType, WZone, WStatic, WFrame, PropRow, PaletteItem }
+export { WType, WZone, WStatic, WFrame, PropRow, PaletteItem, UiSettings }
 
 export component MainWindow inherits Window {
     title: "DashCluster — " + root.dashboard-name;
@@ -80,6 +81,21 @@ export component MainWindow inherits Window {
     callback restack(delta: int);
     callback align(how: string);
 
+    // ---- settings & guide
+    in property <bool> show-settings;
+    in property <bool> show-guide;
+    in property <UiSettings> ui-settings;
+    in property <string> settings-message;
+    in property <string> lan-ip;
+    in property <string> forza-port-text;
+    in property <bool> on-top;
+    callback open-settings();
+    callback apply-settings(UiSettings);
+    callback close-settings();
+    callback open-guide();
+    callback close-guide();
+    always-on-top: root.on-top;
+
     init => { Palette.color-scheme = ColorScheme.dark; }
 
     fs := FocusScope {
@@ -113,6 +129,8 @@ export component MainWindow inherits Window {
             if (e.text == "d" || e.text == "D") { root.toggle-demo(); return accept; }
             if (e.text == "q" || e.text == "Q") { root.toggle-qr(); return accept; }
             if (e.text == "e" || e.text == "E") { root.toggle-edit(); return accept; }
+            if (e.text == "p" || e.text == "P" || e.text == ",") { root.open-settings(); return accept; }
+            if (e.text == "h" || e.text == "H" || e.text == Key.F1) { root.open-guide(); return accept; }
             reject
         }
 
@@ -270,5 +288,20 @@ export component MainWindow inherits Window {
         text: root.status-text;
         color: #6e7681;
         font-size: 11px;
+    }
+
+    if root.show-settings: SettingsPanel {
+        initial: root.ui-settings;
+        message: root.settings-message;
+        apply(v) => { root.apply-settings(v); }
+        cancel => { root.close-settings(); fs.focus(); }
+        show-guide => { root.open-guide(); }
+    }
+
+    if root.show-guide: SetupGuide {
+        lan-ip: root.lan-ip;
+        forza-port: root.forza-port-text;
+        hub-url: root.qr-url;
+        close => { root.close-guide(); fs.focus(); }
     }
 }

@@ -927,6 +927,7 @@ dependencies = [
  "notify",
  "qrcode",
  "rfd",
+ "serde",
  "serde_json",
  "slint",
  "source-demo",

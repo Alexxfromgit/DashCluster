@@ -21,6 +21,7 @@ source-net.workspace = true
 cluster-net.workspace = true
 qrcode.workspace = true
 serde_json.workspace = true
+serde.workspace = true
 json5.workspace = true
 rfd = "0.18"
 directories = "6"

@@ -3,13 +3,17 @@
 
 use crate::editor::{self, Change, Editor};
 use crate::library::{self, Library};
+use crate::settings::Settings;
+use crate::sources::{SourceKind, Sources};
+use cluster_core::SignalBus;
 use cluster_core::{Snapshot, UnitPrefs};
 use cluster_layout::edit::Doc;
+use cluster_ui::UiSettings;
 use cluster_ui::{DashboardView, MainWindow, PropRow};
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 pub fn units_name(u: UnitPrefs) -> &'static str {
@@ -46,6 +50,12 @@ pub struct App {
     pub toast_until: Option<Instant>,
     selected_model: Rc<VecModel<bool>>,
     props_model: Rc<VecModel<PropRow>>,
+    pub settings: Settings,
+    /// Settings as stored on disk (command-line overrides apply only to this run).
+    pub saved_settings: Settings,
+    pub sources: Sources,
+    pub bus: Arc<SignalBus>,
+    pub web_dir: Option<PathBuf>,
 }
 
 enum Confirm {
@@ -83,7 +93,17 @@ fn open_in_file_manager(dir: &Path) {
 }
 
 impl App {
-    pub fn new(ui: &MainWindow, lib: Library, units: UnitPrefs, hub: Option<cluster_net::Hub>) -> App {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        ui: &MainWindow,
+        lib: Library,
+        settings: Settings,
+        saved_settings: Settings,
+        sources: Sources,
+        bus: Arc<SignalBus>,
+        web_dir: Option<PathBuf>,
+    ) -> App {
+        let units = settings.units;
         let (compiled, base) =
             (cluster_layout::Compiled::from_json5(cluster_layout::BUILTIN[0].1).expect("built-in dashboard"), None);
         let (reload_tx, reload_rx) = mpsc::channel();
@@ -97,7 +117,7 @@ impl App {
             lib,
             view: DashboardView::new(compiled, units, base),
             units,
-            hub,
+            hub: None,
             editor: None,
             last_snapshot: Snapshot::new(),
             watcher: None,
@@ -107,6 +127,174 @@ impl App {
             toast_until: None,
             selected_model,
             props_model,
+            settings,
+            saved_settings,
+            sources,
+            bus,
+            web_dir,
+        }
+    }
+
+    /// (Re)starts this app's hub per settings and updates the QR code.
+    pub fn restart_hub(&mut self) {
+        self.hub = None; // stop the old one first (frees the port)
+        let ui = self.ui();
+        if !self.settings.hub_enabled {
+            ui.set_qr_url("Sharing is off".into());
+            ui.set_qr_detail("Turn on “Share telemetry” in Settings (P) to use a phone.".into());
+            ui.set_qr_image(slint::Image::default());
+            return;
+        }
+        let config = cluster_net::HubConfig {
+            port: self.settings.hub_port,
+            web_dir: self.web_dir.clone(),
+            ..Default::default()
+        };
+        match cluster_net::Hub::start(self.bus.clone(), cluster_net::Catalog::default(), config) {
+            Ok(h) => {
+                let url = h.url();
+                log::info!("phones can open {url}");
+                ui.set_qr_url(url.clone().into());
+                ui.set_qr_image(crate::qr_image(&url));
+                ui.set_qr_detail("".into());
+                self.hub = Some(h);
+                self.publish_catalog();
+            }
+            Err(e) => {
+                log::warn!("hub not started: {e:#}");
+                ui.set_qr_url("Hub couldn't start".into());
+                ui.set_qr_detail(format!("{e:#}. Pick another hub port in Settings (P).").into());
+                ui.set_qr_image(slint::Image::default());
+            }
+        }
+    }
+
+    pub fn source_kind(&self) -> SourceKind {
+        match self.settings.source.as_str() {
+            "demo" => SourceKind::Demo,
+            "hub" => SourceKind::Hub(
+                (!self.settings.hub_address.trim().is_empty()).then(|| self.settings.hub_address.trim().to_owned()),
+            ),
+            _ => SourceKind::Forza,
+        }
+    }
+
+    pub fn ui_settings(&self) -> UiSettings {
+        use cluster_core::units::*;
+        let s = &self.settings;
+        let u = &s.units;
+        UiSettings {
+            source: match s.source.as_str() {
+                "demo" => 1,
+                "hub" => 2,
+                _ => 0,
+            },
+            forza_port: s.forza_port.to_string().into(),
+            hub_address: s.hub_address.clone().into(),
+            hub_enabled: s.hub_enabled,
+            hub_port: s.hub_port.to_string().into(),
+            speed: match u.speed {
+                SpeedUnit::Kmh => 0,
+                SpeedUnit::Mph => 1,
+                SpeedUnit::Ms => 2,
+            },
+            temperature: match u.temperature {
+                TempUnit::Celsius => 0,
+                TempUnit::Fahrenheit => 1,
+            },
+            pressure: match u.pressure {
+                PressureUnit::Bar => 0,
+                PressureUnit::Psi => 1,
+                PressureUnit::Kpa => 2,
+            },
+            power: match u.power {
+                PowerUnit::Kw => 0,
+                PowerUnit::Hp => 1,
+                PowerUnit::Ps => 2,
+            },
+            torque: match u.torque {
+                TorqueUnit::Nm => 0,
+                TorqueUnit::LbFt => 1,
+            },
+            start_fullscreen: s.start_fullscreen,
+            always_on_top: s.always_on_top,
+        }
+    }
+
+    pub fn open_settings(&mut self) {
+        let ui = self.ui();
+        ui.set_ui_settings(self.ui_settings());
+        ui.set_settings_message("".into());
+        ui.set_show_settings(true);
+    }
+
+    /// Applies the settings panel; restarts the source/hub only if their settings changed.
+    pub fn apply_ui_settings(&mut self, v: UiSettings) {
+        use cluster_core::units::*;
+        let ui = self.ui();
+        let port = |t: &str, what: &str| {
+            t.trim().parse::<u16>().ok().filter(|p| *p > 0).ok_or(format!("{what} must be a number from 1 to 65535"))
+        };
+        let (forza_port, hub_port) = match (port(&v.forza_port, "Forza port"), port(&v.hub_port, "Hub port")) {
+            (Ok(a), Ok(b)) => (a, b),
+            (Err(e), _) | (_, Err(e)) => {
+                ui.set_settings_message(e.into());
+                return;
+            }
+        };
+        let mut s = self.settings.clone();
+        s.source = ["forza", "demo", "hub"][v.source.clamp(0, 2) as usize].into();
+        s.forza_port = forza_port;
+        s.hub_address = v.hub_address.trim().to_owned();
+        s.hub_enabled = v.hub_enabled;
+        s.hub_port = hub_port;
+        s.units = UnitPrefs {
+            speed: [SpeedUnit::Kmh, SpeedUnit::Mph, SpeedUnit::Ms][v.speed.clamp(0, 2) as usize],
+            temperature: [TempUnit::Celsius, TempUnit::Fahrenheit][v.temperature.clamp(0, 1) as usize],
+            pressure: [PressureUnit::Bar, PressureUnit::Psi, PressureUnit::Kpa][v.pressure.clamp(0, 2) as usize],
+            power: [PowerUnit::Kw, PowerUnit::Hp, PowerUnit::Ps][v.power.clamp(0, 2) as usize],
+            torque: [TorqueUnit::Nm, TorqueUnit::LbFt][v.torque.clamp(0, 1) as usize],
+            acceleration: s.units.acceleration,
+        };
+        s.start_fullscreen = v.start_fullscreen;
+        s.always_on_top = v.always_on_top;
+
+        let old = std::mem::replace(&mut self.settings, s.clone());
+        if old.hub_enabled != s.hub_enabled || old.hub_port != s.hub_port {
+            self.restart_hub();
+        }
+        let source_changed =
+            old.source != s.source || old.forza_port != s.forza_port || old.hub_address != s.hub_address;
+        if source_changed || old.hub_port != s.hub_port {
+            self.sources.config.forza_port = s.forza_port;
+            self.sources.config.own_hub_port = s.hub_enabled.then_some(s.hub_port);
+            let kind = self.source_kind();
+            self.sources.start(kind);
+        }
+        if old.units != s.units {
+            self.units = s.units;
+            let snap = self.last_snapshot.clone();
+            self.view.set_units(s.units, &snap);
+            self.publish_catalog();
+        }
+        ui.set_on_top(s.always_on_top);
+        ui.set_forza_port_text(s.forza_port.to_string().into());
+        let mut saved = s;
+        saved.dashboard = self.saved_settings.dashboard.clone();
+        saved.setup_seen = self.saved_settings.setup_seen;
+        saved.show_status = self.saved_settings.show_status;
+        self.saved_settings = saved;
+        self.saved_settings.save();
+        ui.set_show_settings(false);
+        self.toast("Settings saved");
+    }
+
+    /// Remembers the dashboard being shown for next launch.
+    pub fn remember_dashboard(&mut self) {
+        let label = self.lib.current().label();
+        if self.saved_settings.dashboard != label {
+            self.saved_settings.dashboard = label;
+            self.saved_settings.save();
         }
     }
 
@@ -219,6 +407,7 @@ impl App {
         if self.load_current() {
             let name = self.view.name().to_owned();
             self.toast(&name);
+            self.remember_dashboard();
         }
     }
 
