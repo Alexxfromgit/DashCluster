@@ -7,6 +7,7 @@ pub mod signal;
 pub mod snapshot;
 pub mod source;
 pub mod units;
+pub mod wire;
 
 pub use bus::{SignalBus, SourceState, SourceStatus, Stamped};
 pub use signal::{Quantity, SignalId, SignalSet};

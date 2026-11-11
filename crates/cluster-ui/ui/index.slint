@@ -25,6 +25,12 @@ export component MainWindow inherits Window {
     in property <string> error-text;
     in property <string> toast-text;
     in property <bool> show-status: true;
+    in property <bool> show-qr;
+    in property <image> qr-image;
+    in property <string> qr-url;
+    in property <string> qr-detail;
+    // Tap zones for touch screens: left third = previous, right third = next, middle = fullscreen.
+    in property <bool> touch-nav: false;
 
     callback next-dashboard();
     callback previous-dashboard();
@@ -32,6 +38,7 @@ export component MainWindow inherits Window {
     callback toggle-fullscreen();
     callback toggle-status();
     callback toggle-demo();
+    callback toggle-qr();
 
     FocusScope {
         key-pressed(e) => {
@@ -41,10 +48,23 @@ export component MainWindow inherits Window {
             if (e.text == "f" || e.text == "F" || e.text == Key.F11) { root.toggle-fullscreen(); return accept; }
             if (e.text == "s" || e.text == "S") { root.toggle-status(); return accept; }
             if (e.text == "d" || e.text == "D") { root.toggle-demo(); return accept; }
+            if (e.text == "q" || e.text == "Q") { root.toggle-qr(); return accept; }
             reject
         }
 
         dash := Dashboard { }
+
+        if root.touch-nav: TouchArea {
+            clicked => {
+                if (self.pressed-x < root.width / 3) {
+                    root.previous-dashboard();
+                } else if (self.pressed-x > root.width * 2 / 3) {
+                    root.next-dashboard();
+                } else {
+                    root.toggle-fullscreen();
+                }
+            }
+        }
     }
 
     if root.overlay-title != "": Rectangle {
@@ -97,6 +117,31 @@ export component MainWindow inherits Window {
         border-width: 1px;
         border-color: #ffffff2a;
         toast := Text { text: root.toast-text; color: #fff; font-size: 15px; font-weight: 600; }
+    }
+
+    if root.show-qr: Rectangle {
+        background: #000000cc;
+        TouchArea { clicked => { root.toggle-qr(); } }
+        Rectangle {
+            width: min(root.width - 32px, 420px);
+            height: qr-col.preferred-height;
+            border-radius: 16px;
+            background: #111820;
+            border-width: 1px;
+            border-color: #ffffff22;
+            qr-col := VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
+                Text { text: "Open on your phone"; color: #fff; font-size: 20px; font-weight: 700; horizontal-alignment: center; }
+                Text { text: "Same Wi-Fi network · scan with the camera"; color: #9aa4b2; font-size: 13px; horizontal-alignment: center; }
+                Rectangle {
+                    height: min(root.height - 220px, 300px);
+                    Image { source: root.qr-image; image-fit: contain; image-rendering: pixelated; width: parent.height; height: parent.height; }
+                }
+                Text { text: root.qr-url; color: #58a6ff; font-size: 16px; font-weight: 600; horizontal-alignment: center; }
+                Text { text: root.qr-detail; color: #9aa4b2; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
+            }
+        }
     }
 
     if root.show-status: Text {

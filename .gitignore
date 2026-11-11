@@ -3,3 +3,4 @@
 .DS_Store
 /dist
 *.ctlog.tmp
+/apps/cluster-web/dist

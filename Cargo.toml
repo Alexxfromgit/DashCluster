@@ -14,6 +14,8 @@ source-demo = { path = "crates/source-demo" }
 source-forza = { path = "crates/source-forza" }
 cluster-ui = { path = "crates/cluster-ui" }
 cluster-layout = { path = "crates/cluster-layout" }
+cluster-net = { path = "crates/cluster-net" }
+source-net = { path = "crates/source-net" }
 
 anyhow = "1"
 thiserror = "2"
@@ -24,6 +26,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 json5 = "1.3"
 notify = "8"
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+mdns-sd = "0.21"
+qrcode = { version = "0.14", default-features = false }
+tungstenite = "0.30"
 arc-swap = "1.9"
 web-time = "1"
 slint = "1.18"
@@ -39,3 +47,9 @@ all = { level = "warn", priority = -1 }
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Web display build (scripts/build-web.sh): small, and keeps wasm-bindgen's metadata.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+strip = false

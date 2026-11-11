@@ -1,0 +1,25 @@
+[package]
+name = "cluster-web"
+description = "DashCluster web display (WASM): the dashboard UI in a phone or tablet browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cluster-core.workspace = true
+cluster-layout.workspace = true
+cluster-ui.workspace = true
+slint.workspace = true
+serde_json.workspace = true
+log.workspace = true
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = ["WebSocket", "MessageEvent", "BinaryType", "Window", "Location", "CloseEvent", "Performance", "Document", "Element", "HtmlElement", "EventTarget", "console"] }
+
+[lints]
+workspace = true

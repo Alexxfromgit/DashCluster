@@ -1,6 +1,8 @@
 //! The trait telemetry sources implement, and a runner that drives one on its own thread.
 
-use crate::bus::{SignalBus, SourceState, SourceStatus};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::bus::SourceStatus;
+use crate::bus::{SignalBus, SourceState};
 use crate::signal::SignalSet;
 use crate::snapshot::Snapshot;
 use std::sync::Arc;

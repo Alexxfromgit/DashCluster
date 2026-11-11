@@ -26,6 +26,14 @@ impl Entry {
         }
     }
 
+    /// The dashboard's JSON5 text.
+    pub fn text(&self) -> anyhow::Result<String> {
+        match self {
+            Entry::Builtin { src, .. } => Ok((*src).to_owned()),
+            Entry::File(p) => std::fs::read_to_string(p).map_err(|e| anyhow::anyhow!("{}: {e}", p.display())),
+        }
+    }
+
     /// Parses and validates the dashboard. Returns it with the folder its relative
     /// image paths resolve against.
     pub fn load(&self) -> anyhow::Result<(Compiled, Option<PathBuf>)> {

@@ -1,0 +1,21 @@
+[package]
+name = "source-net"
+description = "Telemetry source that mirrors another DashCluster hub over WebSocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+cluster-core.workspace = true
+anyhow.workspace = true
+log.workspace = true
+serde_json.workspace = true
+tungstenite.workspace = true
+mdns-sd.workspace = true
+
+[dev-dependencies]
+cluster-net.workspace = true
+
+[lints]
+workspace = true

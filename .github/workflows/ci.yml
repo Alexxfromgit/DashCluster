@@ -29,3 +29,14 @@ jobs:
         with:
           name: snapshot-${{ matrix.os }}
           path: snapshot.png
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Web display compiles to WASM
+        run: cargo build -p cluster-web --target wasm32-unknown-unknown

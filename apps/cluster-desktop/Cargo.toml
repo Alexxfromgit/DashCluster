@@ -17,6 +17,9 @@ notify.workspace = true
 cluster-ui = { workspace = true, features = ["offscreen"] }
 source-demo.workspace = true
 source-forza.workspace = true
+source-net.workspace = true
+cluster-net.workspace = true
+qrcode.workspace = true
 slint.workspace = true
 anyhow.workspace = true
 log.workspace = true

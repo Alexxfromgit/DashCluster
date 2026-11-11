@@ -10,6 +10,8 @@ pub enum SourceKind {
     Demo,
     Forza,
     Replay(PathBuf),
+    /// Mirror another DashCluster hub (`None` = discover via mDNS).
+    Hub(Option<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,8 @@ pub struct SourceConfig {
     pub record: Option<PathBuf>,
     pub forward: Vec<SocketAddr>,
     pub replay_speed: f32,
+    /// Our own hub's port, so discovery doesn't connect to ourselves.
+    pub own_hub_port: Option<u16>,
 }
 
 pub struct Sources {
@@ -58,6 +62,12 @@ impl Sources {
                 path: path.clone(),
                 speed: self.config.replay_speed,
                 looping: true,
+            }),
+            SourceKind::Hub(addr) => Box::new(source_net::HubSource {
+                target: match addr {
+                    Some(a) => source_net::HubTarget::Address(a.clone()),
+                    None => source_net::HubTarget::Discover { exclude_port: self.config.own_hub_port },
+                },
             }),
         };
         if kind != SourceKind::Demo {

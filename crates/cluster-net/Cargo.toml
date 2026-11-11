@@ -1,0 +1,23 @@
+[package]
+name = "cluster-net"
+description = "Telemetry hub: serves the web display and streams snapshots to remote displays"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+cluster-core.workspace = true
+anyhow.workspace = true
+log.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
+mdns-sd.workspace = true
+
+[dev-dependencies]
+tungstenite.workspace = true
+
+[lints]
+workspace = true

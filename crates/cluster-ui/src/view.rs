@@ -58,6 +58,7 @@ fn frame_to_slint(f: &WidgetFrame) -> WFrame {
 /// Loads images referenced by a dashboard, relative to its folder.
 #[derive(Default)]
 pub struct ImageCache {
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     base_dir: Option<PathBuf>,
     cache: HashMap<String, slint::Image>,
 }

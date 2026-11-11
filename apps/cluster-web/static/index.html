@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>DashCluster</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; }
+    canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; outline: none; }
+    #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #9aa4b2;
+               font: 600 16px system-ui, -apple-system, sans-serif; letter-spacing: .02em; }
+  </style>
+</head>
+<body>
+  <div id="loading">Loading dashboard…</div>
+  <canvas id="canvas"></canvas>
+  <script type="module">
+    import init from './cluster_web.js';
+    // Keep the phone screen on while the dashboard is visible (where supported).
+    let lock = null;
+    async function keepAwake() {
+      try { if ('wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen'); } catch (_) {}
+    }
+    document.addEventListener('visibilitychange', keepAwake);
+    document.addEventListener('pointerdown', keepAwake, { once: true });
+    keepAwake();
+    const loading = document.getElementById('loading');
+    init().then(() => loading.remove(), e => {
+      // winit's web event loop throws this on purpose to hand control back to the browser.
+      if (String(e).includes('Using exceptions for control flow')) { loading.remove(); return; }
+      loading.textContent = 'Could not start: ' + e;
+    });
+  </script>
+</body>
+</html>

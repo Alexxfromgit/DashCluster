@@ -45,6 +45,18 @@ struct Cli {
     /// Replay speed multiplier.
     #[arg(long, default_value_t = 1.0, global = true)]
     replay_speed: f32,
+    /// Hub to mirror with --source hub (host:port). Omit to find one on the network.
+    #[arg(long, value_name = "ADDR", global = true)]
+    hub: Option<String>,
+    /// Port for this app's hub (phones and other displays connect here).
+    #[arg(long, default_value_t = cluster_net::DEFAULT_PORT, global = true)]
+    hub_port: u16,
+    /// Don't run a hub (no phone/network displays).
+    #[arg(long, global = true)]
+    no_hub: bool,
+    /// Serve the web display from this folder instead of the built-in copy (development).
+    #[arg(long, value_name = "DIR", global = true)]
+    web_dir: Option<PathBuf>,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -57,6 +69,8 @@ enum Source {
     Demo,
     /// Play a .ctlog recording (see --replay)
     Replay,
+    /// Mirror another DashCluster (see --hub)
+    Hub,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
@@ -100,6 +114,7 @@ fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
         Source::Replay => SourceKind::Replay(
             cli.replay.clone().ok_or_else(|| anyhow::anyhow!("--source replay needs --replay FILE"))?,
         ),
+        Source::Hub => SourceKind::Hub(cli.hub.clone()),
     })
 }
 
@@ -109,7 +124,36 @@ fn source_config(cli: &Cli) -> SourceConfig {
         record: cli.record.clone(),
         forward: cli.forward.clone(),
         replay_speed: cli.replay_speed,
+        own_hub_port: (!cli.no_hub).then_some(cli.hub_port),
     }
+}
+
+fn units_name(u: UnitPrefs) -> &'static str {
+    if u == UnitPrefs::default() { "metric" } else { "imperial" }
+}
+
+/// Renders a QR code for `text` as an image.
+fn qr_image(text: &str) -> slint::Image {
+    let Ok(code) = qrcode::QrCode::new(text.as_bytes()) else { return slint::Image::default() };
+    let n = code.width();
+    let colors = code.to_colors();
+    let (quiet, scale) = (4usize, 8usize);
+    let side = (n + 2 * quiet) * scale;
+    let mut buf = slint::SharedPixelBuffer::<slint::Rgb8Pixel>::new(side as u32, side as u32);
+    let px = buf.make_mut_slice();
+    for y in 0..side {
+        for x in 0..side {
+            let (mx, my) = ((x / scale) as isize - quiet as isize, (y / scale) as isize - quiet as isize);
+            let dark = mx >= 0
+                && my >= 0
+                && (mx as usize) < n
+                && (my as usize) < n
+                && colors[my as usize * n + mx as usize] == qrcode::Color::Dark;
+            let v = if dark { 0 } else { 255 };
+            px[y * side + x] = slint::Rgb8Pixel::new(v, v, v);
+        }
+    }
+    slint::Image::from_rgb8(buf)
 }
 
 fn library(cli: &Cli) -> anyhow::Result<Library> {
@@ -184,9 +228,21 @@ struct App {
     reload_tx: mpsc::Sender<()>,
     pending_reload: Option<Instant>,
     toast_until: Option<Instant>,
+    hub: Option<cluster_net::Hub>,
 }
 
 impl App {
+    /// Tells the hub which dashboards exist and which one is showing here.
+    fn publish_catalog(&self) {
+        let Some(hub) = &self.hub else { return };
+        let dashboards = self.lib.entries.iter().filter_map(|e| e.text().ok().map(|t| (e.label(), t))).collect();
+        hub.set_catalog(cluster_net::Catalog {
+            dashboards,
+            current: self.lib.current().label(),
+            units: units_name(self.units).into(),
+        });
+    }
+
     fn ui(&self) -> MainWindow {
         self.ui.upgrade().expect("window alive")
     }
@@ -207,6 +263,7 @@ impl App {
                 let ui = self.ui();
                 bind_view(&ui, &mut self.view);
                 ui.set_error_text("".into());
+                self.publish_catalog();
                 true
             }
             Err(e) => {
@@ -264,6 +321,29 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
 
     let ui = MainWindow::new()?;
     let lib = library(cli)?;
+    let hub = if cli.no_hub {
+        None
+    } else {
+        let config = cluster_net::HubConfig { port: cli.hub_port, web_dir: cli.web_dir.clone(), ..Default::default() };
+        match cluster_net::Hub::start(bus.clone(), cluster_net::Catalog::default(), config) {
+            Ok(h) => {
+                log::info!("phones can open {}", h.url());
+                Some(h)
+            }
+            Err(e) => {
+                log::warn!("hub not started: {e:#}");
+                None
+            }
+        }
+    };
+    if let Some(h) = &hub {
+        let url = h.url();
+        ui.set_qr_url(url.clone().into());
+        ui.set_qr_image(qr_image(&url));
+    } else {
+        ui.set_qr_url("Hub is off".into());
+        ui.set_qr_detail("Start without --no-hub, or check that the port is free.".into());
+    }
     let (compiled, base) = cluster_layout::BUILTIN
         .first()
         .map(|(_, src)| (cluster_layout::Compiled::from_json5(src).expect("built-in dashboard"), None))
@@ -280,6 +360,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         reload_tx,
         pending_reload: None,
         toast_until: None,
+        hub,
     }));
     app.borrow_mut().load_current();
 
@@ -304,8 +385,17 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             a.units = if a.units == UnitPrefs::default() { UnitPrefs::imperial() } else { UnitPrefs::default() };
             let units = a.units;
             a.view.set_units(units, &bus.latest().snapshot);
+            a.publish_catalog();
             let label = if units == UnitPrefs::default() { "Units: metric" } else { "Units: imperial" };
             a.toast(label);
+        });
+    }
+    {
+        let weak = ui.as_weak();
+        ui.on_toggle_qr(move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.set_show_qr(!ui.get_show_qr());
+            }
         });
     }
     {
@@ -382,12 +472,17 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             ui.set_stale(stale || paused);
             ui.set_status_text(
                 format!(
-                    "{} · {} · {} · {}/{}  —  ←/→ dashboards · D demo · U units · F fullscreen · S hide",
+                    "{} · {} · {} · {}/{}{}  —  ←/→ dashboards · D demo · Q phone · U units · F fullscreen · S hide",
                     st.source,
                     state,
                     a.view.name(),
                     a.lib.current + 1,
-                    a.lib.entries.len()
+                    a.lib.entries.len(),
+                    a.hub.as_ref().map_or(String::new(), |h| match h.client_count() {
+                        0 => String::new(),
+                        1 => " · 1 display".into(),
+                        n => format!(" · {n} displays"),
+                    })
                 )
                 .into(),
             );
