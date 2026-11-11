@@ -1,6 +1,10 @@
 /target
+/dist
+/apps/cluster-web/dist
+/snapshots
+/*.ctlog
+/snapshot.png
 **/*.rs.bk
 .DS_Store
-/dist
-*.ctlog.tmp
-/apps/cluster-web/dist
+.idea/
+.vscode/

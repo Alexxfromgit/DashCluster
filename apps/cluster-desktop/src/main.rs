@@ -266,13 +266,13 @@ fn snapshot(
             ui.set_show_settings(true);
         }
         Some("guide") => {
-            ui.set_lan_ip("192.168.1.122".into());
+            ui.set_lan_ip("192.168.1.20".into());
             ui.set_forza_port_text("5300".into());
-            ui.set_qr_url("http://192.168.1.122:5380/".into());
+            ui.set_qr_url("http://192.168.1.20:5380/".into());
             ui.set_show_guide(true);
         }
         Some("qr") => {
-            let url = "http://192.168.1.122:5380/";
+            let url = "http://192.168.1.20:5380/";
             ui.set_qr_url(url.into());
             ui.set_qr_image(qr_image(url));
             ui.set_show_qr(true);

@@ -1,42 +1,109 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
+  build:
+    name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - { name: Windows, os: windows-latest }
+          - { name: macOS, os: macos-latest }
+          - { name: Linux, os: ubuntu-24.04 }
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - name: Headless dashboard snapshot
-        run: cargo run -p cluster-desktop -- snapshot --out snapshot.png
-      - uses: actions/upload-artifact@v4
+
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy (warnings as errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Renders every sample dashboard headlessly (software renderer), including the editor,
+      # settings panel and setup guide, so a UI that fails to build or lay out shows up here.
+      - name: Render dashboards
+        shell: bash
+        run: |
+          mkdir -p snapshots
+          bin=target/debug/dashcluster
+          cargo build -p cluster-desktop
+          for d in grand-tourer race rally phone-portrait; do
+            "$bin" snapshot -d "$d" --width 1200 --out "snapshots/$d.png"
+          done
+          "$bin" snapshot -d race --edit gear --width 1600 --height 900 --out snapshots/editor.png
+          "$bin" snapshot -d race --overlay settings --width 1280 --height 800 --out snapshots/settings.png
+          "$bin" snapshot -d race --overlay guide --width 1280 --height 800 --out snapshots/guide.png
+          for f in snapshots/*.png; do test -s "$f"; done
+
+      - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: snapshot-${{ matrix.os }}
-          path: snapshot.png
+          name: snapshots-${{ matrix.name }}
+          path: snapshots
+          if-no-files-found: ignore
+          retention-days: 14
 
   web:
-    runs-on: ubuntu-latest
+    name: Web display (WASM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Web display compiles to WASM
-        run: cargo build -p cluster-web --target wasm32-unknown-unknown
+      - name: Clippy (wasm32)
+        run: cargo clippy -p cluster-web --target wasm32-unknown-unknown -- -D warnings
+      - name: Build the web display
+        run: ./scripts/build-web.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-display
+          path: apps/cluster-web/dist
+          retention-days: 14
+
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # actionlint also runs shellcheck on every run: block.
+      - uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color

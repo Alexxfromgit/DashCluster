@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    # "ci: bump …": workflow updates do not need a release.
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    # "deps: bump …": dependency updates are listed in the release notes.
+    commit-message:
+      prefix: deps
+    groups:
+      slint:
+        patterns: ["slint", "slint-build"]
+      rust-dependencies:
+        patterns: ["*"]
+        exclude-patterns: ["slint", "slint-build"]

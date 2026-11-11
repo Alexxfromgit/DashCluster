@@ -1,0 +1,19 @@
+name: Feature or game request
+description: Suggest an idea, a widget, a dashboard, or a game to support
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to see or do that you can't today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+      description: For a new game, name the telemetry it offers (UDP, shared memory, plugin) if you know it.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered

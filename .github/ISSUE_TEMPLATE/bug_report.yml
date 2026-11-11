@@ -1,0 +1,61 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start DashCluster, Settings → Source: Forza
+        2. Forza Horizon 5 Data Out → 192.168.1.20:5300
+        3. Drive; the tyre temperatures show …
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Telemetry from a game (Forza, …)
+        - Dashboard display / widgets
+        - Visual editor or dashboard files
+        - Phone / browser display
+        - Second computer (network hub)
+        - Settings, setup guide
+        - Build or installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and platform
+      placeholder: Forza Horizon 5, Microsoft Store version, Windows 11
+  - type: input
+    id: version
+    attributes:
+      label: DashCluster version or commit
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system running DashCluster
+      options: [Windows 11, Windows 10, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else?
+      description: >
+        Screenshots, the status bar text, or a short recording of the problem
+        (`dashcluster --record session.ctlog`, then attach the file).
