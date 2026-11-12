@@ -54,6 +54,29 @@ mod tests {
     }
 
     #[test]
+    fn rejects_hostile_input_without_panicking() {
+        let base =
+            |extra: &str| format!(r#"{{ name: "x", canvas: {{width: 100, height: 100}}, widgets: [ {extra} ] }}"#);
+        for bad in [
+            r#"{ type: "readout", x: 0, y: 0, w: 1, h: 1, bind: "speed", format: { decimals: 70000 } }"#,
+            r#"{ type: "label", x: 0, y: 0, w: 1, h: 1, text: "{speed:99999}" }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "speed", max: 1, format: { decimals: 7 } }"#,
+        ] {
+            assert!(Compiled::from_json5(&base(bad)).is_err(), "{bad}");
+        }
+        // 40 000 levels of nesting would overflow the parser's stack.
+        let deep = format!("{{ name: \"x\", junk: {}{} }}", "[".repeat(40_000), "]".repeat(40_000));
+        assert!(Compiled::from_json5(&deep).unwrap_err().to_string().contains("nested"));
+        // Brackets inside strings and comments don't count.
+        let ok = base(
+            r#"{ type: "label", x: 0, y: 0, w: 1, h: 1, text: "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" } // [[[[
+"#,
+        );
+        assert!(Compiled::from_json5(&ok).is_ok());
+        assert!(compile::check_source(&"x".repeat(compile::MAX_SOURCE_BYTES + 1)).is_err());
+    }
+
+    #[test]
     fn layouts_round_trip_through_json() {
         for (name, src) in BUILTIN {
             let a: Layout = json5::from_str(src).unwrap();

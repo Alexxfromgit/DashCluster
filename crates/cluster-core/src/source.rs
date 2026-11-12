@@ -3,7 +3,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::bus::SourceStatus;
 use crate::bus::{SignalBus, SourceState};
-use crate::signal::SignalSet;
 use crate::snapshot::Snapshot;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,8 +49,6 @@ impl SourceContext {
 pub trait TelemetrySource: Send + 'static {
     /// Short display name, e.g. "Demo car" or "Forza (UDP 5300)".
     fn name(&self) -> String;
-    /// Signals this source can provide (it may still omit some in a given frame).
-    fn capabilities(&self) -> SignalSet;
     fn run(&mut self, ctx: &SourceContext) -> anyhow::Result<()>;
 }
 
@@ -66,12 +63,7 @@ pub struct SourceRunner {
 impl SourceRunner {
     pub fn start(bus: Arc<SignalBus>, mut source: Box<dyn TelemetrySource>) -> Self {
         bus.reset();
-        bus.set_status(SourceStatus {
-            source: source.name(),
-            state: SourceState::Waiting,
-            detail: String::new(),
-            capabilities: source.capabilities(),
-        });
+        bus.set_status(SourceStatus { source: source.name(), state: SourceState::Waiting, detail: String::new() });
         let ctx = SourceContext::new(bus);
         let thread_ctx = ctx.clone();
         let handle = std::thread::Builder::new()
@@ -114,9 +106,6 @@ mod tests {
     impl TelemetrySource for Counter {
         fn name(&self) -> String {
             "counter".into()
-        }
-        fn capabilities(&self) -> SignalSet {
-            SignalSet::of(&[SignalId::Rpm])
         }
         fn run(&mut self, ctx: &SourceContext) -> anyhow::Result<()> {
             let mut n = 0u64;

@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
                 std::thread::sleep((r.t - start.elapsed()).min(Duration::from_millis(20)));
             }
             match sock.send(&r.payload) {
-                Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                Err(e) if is_unreachable(&e) => {}
                 other => {
                     other?;
                 }
@@ -99,7 +99,7 @@ fn main() -> anyhow::Result<()> {
         }
         // Like the game, keep sending even if nobody is listening yet.
         match sock.send(&codec::encode(format, &packet)) {
-            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {}
+            Err(e) if is_unreachable(&e) => {}
             other => {
                 other?;
             }
@@ -112,4 +112,10 @@ fn main() -> anyhow::Result<()> {
     }
     println!("{sent} packets sent");
     Ok(())
+}
+
+/// "Nobody is listening yet": ICMP port unreachable surfaces on a connected UDP socket as
+/// ConnectionRefused (macOS/Linux) or ConnectionReset (Windows). The game keeps sending, so do we.
+fn is_unreachable(e: &std::io::Error) -> bool {
+    matches!(e.kind(), std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset)
 }

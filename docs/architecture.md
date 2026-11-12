@@ -14,7 +14,7 @@
 
 | Crate | Role |
 |---|---|
-| `cluster-core` | The signal catalog (`SignalId`, one place), `Snapshot` (one frame; missing ≠ 0), unit conversion (`UnitPrefs`), `SignalBus`, the `TelemetrySource` trait and runner, and the hub wire protocol |
+| `cluster-core` | The signal catalog (`SignalId`, one place), `Snapshot` (one frame; missing ≠ 0), unit conversion (`UnitPrefs`), `SignalBus`, the `TelemetrySource` trait and runner, the hub wire protocol, and network helpers (LAN address, mDNS service name, this app's instance ID) |
 | `cluster-layout` | Dashboard files: the JSON5 model, validation with readable errors (`compile`), per-frame evaluation (`eval`: units, zones, smoothing, templates, dynamic ranges) and editing operations (`edit`: property schemas, undo/redo). No UI dependency, so it is shared by desktop and web and fully unit-tested |
 | `cluster-ui` | Slint: the widget library (`widgets.slint`), the scaled `Dashboard`, the editor and settings panels, `DashboardView` (keeps the Slint models in sync with the evaluator) and an offscreen renderer for headless PNGs |
 | `cluster-net` | The hub: axum serves the embedded web display and `/ws`, which streams binary frames and JSON control messages; mDNS advertisement |
@@ -24,6 +24,7 @@
 | `apps/cluster-desktop` | The `dashcluster` binary: library of dashboards, hot reload, editor controller, settings, sources, hub, CLI |
 | `apps/cluster-web` | The browser display: the same `cluster-ui` compiled to WebAssembly, fed by the hub's WebSocket |
 | `tools/forza-fake` | Sends Forza packets from the demo car or a recording |
+| `tools/license-notices` | Writes the license texts of every linked crate for the release packages |
 
 ## Data flow per frame
 

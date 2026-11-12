@@ -39,10 +39,6 @@ export struct WFrame {
     c0: color, c1: color, c2: color, c3: color,
 }
 
-global Fonts {
-    out property <string> family: "";
-}
-
 component Base inherits Rectangle {
     in property <WStatic> st;
     in property <WFrame> fr;

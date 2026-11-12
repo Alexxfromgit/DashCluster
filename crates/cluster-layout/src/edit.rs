@@ -109,7 +109,6 @@ fn binding(prefix: &'static str) -> Vec<(&'static str, &'static str, PropKind)> 
 
 /// Inspector rows for a widget type.
 pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
-    let d = default_widget(kind);
     let mut rows = common();
     match kind {
         "analog_gauge" => {
@@ -217,8 +216,10 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
     if kind != "image" {
         rows.extend(style());
     }
-    let mut out = spec(rows, d);
-    // Values that have defaults in the format but not in the template:
+    // Defaults are what the *file format* assumes when a key is missing (so setting a value
+    // equal to one can drop the key). The new-widget template is not a default: a required
+    // field like a readout's label or signal must never be removed.
+    let mut out = spec(rows, json!({}));
     for s in &mut out {
         if s.default.is_null() {
             s.default = match s.key {
@@ -238,6 +239,8 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 "segments" => json!(10),
                 "flash_color" => json!("info"),
                 "color" if kind == "lamp" => json!("warn"),
+                "bind.signal" if kind == "gear" => json!("gear"),
+                "bind.signal" if kind == "shift_lights" => json!("rpm"),
                 "max_g" => json!(2),
                 "fit" => json!("contain"),
                 _ => Value::Null,
@@ -454,6 +457,8 @@ pub struct Doc {
     redo: Vec<Value>,
     /// Value at the last save, for the dirty flag.
     saved: Value,
+    /// The property being typed into: consecutive edits of it form one undo step.
+    coalesce: Option<String>,
 }
 
 pub const MAX_UNDO: usize = 200;
@@ -466,12 +471,19 @@ fn coord(v: f64) -> Value {
 }
 
 impl Doc {
+    /// A dashboard document. Anything but a JSON object becomes an empty object (which then
+    /// fails validation with a clear message instead of panicking on edits).
     pub fn new(value: Value) -> Doc {
-        Doc { saved: value.clone(), value, undo: vec![], redo: vec![] }
+        let value = if value.is_object() { value } else { json!({}) };
+        Doc { saved: value.clone(), value, undo: vec![], redo: vec![], coalesce: None }
     }
 
-    pub fn from_layout(layout: &Layout) -> Doc {
-        Doc::new(serde_json::to_value(layout).expect("layout serializes"))
+    fn push_undo(&mut self, before: Value) {
+        self.undo.push(before);
+        if self.undo.len() > MAX_UNDO {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
     }
 
     pub fn value(&self) -> &Value {
@@ -521,6 +533,12 @@ impl Doc {
     /// Runs `f` as one undoable step. If the result doesn't compile, it's rolled back and
     /// the error returned.
     pub fn apply(&mut self, f: impl FnOnce(&mut Value)) -> Result<(), String> {
+        self.apply_keyed(None, f)
+    }
+
+    /// Like [`Doc::apply`]; consecutive changes with the same `key` (typing into one field)
+    /// are merged into a single undo step.
+    pub fn apply_keyed(&mut self, key: Option<String>, f: impl FnOnce(&mut Value)) -> Result<(), String> {
         let before = self.value.clone();
         f(&mut self.value);
         if self.value == before {
@@ -533,11 +551,12 @@ impl Doc {
                 other => other.to_string(),
             });
         }
-        self.undo.push(before);
-        if self.undo.len() > MAX_UNDO {
-            self.undo.remove(0);
+        if key.is_none() || key != self.coalesce || self.undo.is_empty() {
+            self.push_undo(before);
+        } else {
+            self.redo.clear();
         }
-        self.redo.clear();
+        self.coalesce = key;
         Ok(())
     }
 
@@ -553,9 +572,9 @@ impl Doc {
 
     /// Records an undo step from `before` to the current value (after live edits).
     pub fn commit_from(&mut self, before: Value) {
+        self.coalesce = None;
         if before != self.value {
-            self.undo.push(before);
-            self.redo.clear();
+            self.push_undo(before);
         }
     }
 
@@ -568,6 +587,7 @@ impl Doc {
     }
 
     pub fn undo(&mut self) -> bool {
+        self.coalesce = None;
         match self.undo.pop() {
             Some(v) => {
                 self.redo.push(std::mem::replace(&mut self.value, v));
@@ -578,6 +598,7 @@ impl Doc {
     }
 
     pub fn redo(&mut self) -> bool {
+        self.coalesce = None;
         match self.redo.pop() {
             Some(v) => {
                 self.undo.push(std::mem::replace(&mut self.value, v));
@@ -753,7 +774,7 @@ impl Doc {
             new = None;
         }
         let key = spec.key;
-        self.apply(|v| {
+        self.apply_keyed(Some(format!("{widget:?}/{key}")), |v| {
             let target = match widget {
                 Some(i) => match v.get_mut("widgets").and_then(Value::as_array_mut).and_then(|a| a.get_mut(i)) {
                     Some(w) => w,
@@ -802,6 +823,51 @@ mod tests {
         assert_eq!(d.widgets()[0]["bind"], json!({ "signal": "speed", "scale": 2 }));
         d.set_prop(Some(0), &spec, "1").unwrap(); // default → removed → short form again
         assert_eq!(d.widgets()[0]["bind"], json!("speed"));
+    }
+
+    #[test]
+    fn setting_a_template_value_keeps_required_fields() {
+        let mut d = Doc::new(blank_layout("x"));
+        let i = d.add_widget("readout", 500.0, 300.0).unwrap();
+        let schema = widget_schema("readout");
+        let spec = |k: &str| schema.iter().find(|s| s.key == k).unwrap().clone();
+        d.set_prop(Some(i), &spec("label"), "KMH").unwrap();
+        d.set_prop(Some(i), &spec("label"), "SPEED").unwrap();
+        assert_eq!(d.widgets()[i]["label"], "SPEED");
+        d.set_prop(Some(i), &spec("bind.signal"), "rpm").unwrap();
+        d.set_prop(Some(i), &spec("bind.signal"), "speed").unwrap();
+        assert_eq!(d.widgets()[i]["bind"], "speed");
+        let j = d.add_widget("lamp", 100.0, 100.0).unwrap();
+        let lamp = widget_schema("lamp");
+        let icon = lamp.iter().find(|s| s.key == "icon").unwrap();
+        d.set_prop(Some(j), icon, "X").unwrap();
+        d.set_prop(Some(j), icon, "HB").unwrap();
+        assert_eq!(d.widgets()[j]["icon"], "HB");
+        // A real format default still tidies the file.
+        d.set_prop(Some(i), &spec("align"), "left").unwrap();
+        d.set_prop(Some(i), &spec("align"), "center").unwrap();
+        assert!(d.widgets()[i].get("align").is_none());
+    }
+
+    #[test]
+    fn typing_into_a_field_is_one_undo_step() {
+        let mut d = doc();
+        let w = widget_schema("readout").into_iter().find(|s| s.key == "w").unwrap();
+        for text in ["1", "12", "120"] {
+            d.set_prop(Some(0), &w, text).unwrap();
+        }
+        assert_eq!(d.rect(0).unwrap()[2], 120.0);
+        assert!(d.undo());
+        assert_eq!(d.rect(0).unwrap()[2], 100.0, "back to the value before typing");
+        assert!(!d.can_undo());
+    }
+
+    #[test]
+    fn non_object_documents_do_not_panic() {
+        let mut d = Doc::new(json!([1, 2, 3]));
+        assert!(d.add_widget("gear", 0.0, 0.0).is_err());
+        d.set_rect_live(0, [1.0, 1.0, 1.0, 1.0]);
+        assert!(d.align(&[0], "left").is_ok());
     }
 
     #[test]

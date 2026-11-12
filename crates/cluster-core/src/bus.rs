@@ -1,7 +1,6 @@
 //! The signal bus: a lock-free "latest value" slot written by one source and read by
 //! any number of consumers (the UI each frame, the network hub, the recorder).
 
-use crate::signal::SignalSet;
 use crate::snapshot::Snapshot;
 use arc_swap::ArcSwap;
 use std::sync::Arc;
@@ -33,17 +32,11 @@ pub struct SourceStatus {
     pub state: SourceState,
     /// Human-readable detail, e.g. "Listening on 0.0.0.0:5300" or "FH5 (324 B)".
     pub detail: String,
-    pub capabilities: SignalSet,
 }
 
 impl Default for SourceStatus {
     fn default() -> Self {
-        SourceStatus {
-            source: String::new(),
-            state: SourceState::Idle,
-            detail: String::new(),
-            capabilities: SignalSet::EMPTY,
-        }
+        SourceStatus { source: String::new(), state: SourceState::Idle, detail: String::new() }
     }
 }
 

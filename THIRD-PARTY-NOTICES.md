@@ -24,11 +24,9 @@ ISC, BSL-1.0, Unicode-3.0, Unlicense, CC0-1.0) and one under **MPL-2.0** (`optio
 source at <https://crates.io/crates/option-ext>). Where a crate offers a choice, DashCluster uses it
 under MIT or Apache-2.0.
 
-The exact list with versions and licenses can be produced from the source:
-
-```bash
-cargo metadata --format-version 1 | jq -r '.packages[] | "\(.name) \(.version): \(.license)"' | sort
-```
+Every release package includes `THIRD-PARTY-LICENSES.txt` with the license texts of all
+these crates and the crates using each. It is generated from the source by
+`cargo run -p license-notices -- --out THIRD-PARTY-LICENSES.txt` (`tools/license-notices`).
 
 Notable direct dependencies: `slint`, `tokio`, `axum` (web server), `tungstenite` (WebSocket client),
 `mdns-sd` (network discovery), `serde`, `serde_json`, `json5`, `notify` (file watching), `rfd` (file

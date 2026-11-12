@@ -1,7 +1,7 @@
 //! A simulated car driving laps of a made-up circuit. Deterministic, so it doubles as a
 //! test fixture: the same `dt` sequence always produces the same telemetry.
 
-use cluster_core::{SignalId as S, SignalSet, Snapshot, SourceContext, SourceState, TelemetrySource};
+use cluster_core::{SignalId as S, Snapshot, SourceContext, SourceState, TelemetrySource};
 use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
@@ -350,16 +350,6 @@ impl Default for DemoSource {
 impl TelemetrySource for DemoSource {
     fn name(&self) -> String {
         "Demo car".into()
-    }
-
-    fn capabilities(&self) -> SignalSet {
-        DemoCar::new().snapshot().present().iter().chain([S::LastLap, S::BestLap]).fold(
-            SignalSet::EMPTY,
-            |mut acc, id| {
-                acc.insert(id);
-                acc
-            },
-        )
     }
 
     fn run(&mut self, ctx: &SourceContext) -> anyhow::Result<()> {

@@ -79,7 +79,8 @@ jobs:
         include:
           - { name: Windows, os: windows-latest }
           - { name: macOS, os: macos-latest }
-          - { name: Linux, os: ubuntu-24.04 }
+          # The oldest supported runner, so the binary runs on glibc 2.35+ (Ubuntu 22.04, Debian 12, …).
+          - { name: Linux, os: ubuntu-22.04 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:

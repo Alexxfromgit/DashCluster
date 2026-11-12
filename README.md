@@ -22,7 +22,7 @@ macOS and Linux and, compiled to WebAssembly, in any phone or tablet browser.
 | Dashboards | 12 widgets: analog and bar gauges, digital readouts, gear, shift lights, warning lamps, tyre temperatures, g-meter, pedal inputs, lap timer, text with live values, images. Four original sample designs |
 | Editor | Visual editor (move, resize, snap, align, undo/redo, property inspector) or plain JSON5 files that reload when saved; `.cluster` packages to share dashboards with their images |
 | Screens | Desktop window (fullscreen, always on top), phone/tablet browser via QR code (no app to install), other computers mirror the first one automatically |
-| Units | Metric or imperial per quantity (speed, temperature, pressure, power, torque); gauge scales re-round themselves |
+| Units | Metric or imperial per quantity (speed, temperature, pressure, power, torque), also on phones; gauge scales re-round themselves |
 | Tools | Demo car, session recording and replay (`.ctlog`), a fake Forza sender for testing without the game, headless PNG rendering |
 
 | Race | Rally | Phone | Editor |
@@ -37,7 +37,7 @@ Get the latest version from [Releases](https://github.com/Alexxfromgit/DashClust
 |---|---|
 | Windows 10/11 (x64) | `DashCluster-<version>-windows.zip` → unzip, run `DashCluster.exe` |
 | macOS 11+ (Apple silicon) | `DashCluster-<version>-macos.dmg` |
-| Linux (x64) | `DashCluster-<version>-linux-x64.tar.gz` |
+| Linux (x64, glibc 2.35+: Ubuntu 22.04, Debian 12 or newer) | `DashCluster-<version>-linux-x64.tar.gz` |
 
 `SHA256SUMS.txt` on each release lists the checksums, and every file's build provenance can be
 checked with `gh attestation verify <file> -R Alexxfromgit/DashCluster`. The builds are not
@@ -60,7 +60,10 @@ The first launch shows these steps with your computer's address filled in (**H**
 4. Allow DashCluster on **private networks** when Windows Firewall or macOS asks.
 5. **Phone:** press **Q** and scan the QR code (same Wi-Fi). Tap the left/right edge to change
    dashboards, the middle for fullscreen. On iPhone, Share → *Add to Home Screen* gives a
-   full-screen app.
+   full-screen app. Phones only let secure (HTTPS) pages keep the screen awake, so turn off
+   auto-lock while you drive (iPhone: Display & Brightness → Auto-Lock; Android: Display →
+   Screen timeout). Image widgets and background images show on the computer only, not yet on
+   phones.
 6. **Another computer:** run DashCluster there and choose Settings (**P**) → Source →
    *Another DashCluster*; it finds the first one by itself.
 
@@ -90,7 +93,7 @@ is documented in [docs/dashboard-format.md](docs/dashboard-format.md).
 
 ## Build and run
 
-You need [Rust](https://rustup.rs) (stable). Everything else is fetched by Cargo.
+You need [Rust](https://rustup.rs) 1.92 or newer (stable). Everything else is fetched by Cargo.
 
 - **Windows:** install Rust with `rustup-init.exe`; when it asks, let it install the Visual Studio
   C++ Build Tools (the "Desktop development with C++" workload).
@@ -122,6 +125,7 @@ with the real game).
 ## License
 
 [MIT](LICENSE). DashCluster uses [Slint](https://slint.dev) under the Slint Royalty-free License
-and other open-source libraries; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The dashboard
+and other open-source libraries; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Every
+download includes the full license texts (`THIRD-PARTY-LICENSES.txt`). The dashboard
 designs are original. Forza, Forza Horizon and Forza Motorsport are trademarks of Microsoft; this
 project is not affiliated with or endorsed by Microsoft or Playground Games.

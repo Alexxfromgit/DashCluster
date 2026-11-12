@@ -163,9 +163,67 @@ pub struct Compiled {
 
 impl Compiled {
     pub fn from_json5(text: &str) -> Result<Compiled, LayoutError> {
+        check_source(text)?;
         let layout: Layout = json5::from_str(text).map_err(|e| LayoutError::Parse(e.to_string()))?;
         compile(layout)
     }
+}
+
+/// Largest dashboard file accepted (real ones are a few KB).
+pub const MAX_SOURCE_BYTES: usize = 1 << 20;
+/// Deepest `{`/`[` nesting accepted (real dashboards use about 5).
+pub const MAX_NESTING: usize = 64;
+
+/// Rejects input that is too large or too deeply nested *before* parsing it: the JSON5 parser
+/// recurses per level, so a tiny file with thousands of `[` would overflow the stack.
+pub fn check_source(text: &str) -> Result<(), LayoutError> {
+    if text.len() > MAX_SOURCE_BYTES {
+        return Err(LayoutError::Parse(format!("file is too large ({} KB; the limit is 1 MB)", text.len() / 1024)));
+    }
+    let (mut depth, mut max) = (0usize, 0usize);
+    let mut quote: Option<char> = None;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match quote {
+            Some(q) => {
+                if c == '\\' {
+                    chars.next();
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' => quote = Some(c),
+                '/' if chars.peek() == Some(&'/') => {
+                    for c in chars.by_ref() {
+                        if c == '\n' {
+                            break;
+                        }
+                    }
+                }
+                '/' if chars.peek() == Some(&'*') => {
+                    chars.next();
+                    let mut prev = ' ';
+                    for c in chars.by_ref() {
+                        if prev == '*' && c == '/' {
+                            break;
+                        }
+                        prev = c;
+                    }
+                }
+                '{' | '[' => {
+                    depth += 1;
+                    max = max.max(depth);
+                }
+                '}' | ']' => depth = depth.saturating_sub(1),
+                _ => {}
+            },
+        }
+    }
+    if max > MAX_NESTING {
+        return Err(LayoutError::Parse(format!("nested more than {MAX_NESTING} levels deep")));
+    }
+    Ok(())
 }
 
 struct Ctx {
@@ -218,6 +276,12 @@ impl Ctx {
             ceil_to: b.ceil_to.filter(|c| *c > 0.0),
             convert: b.convert,
             fallback: b.fallback,
+        }
+    }
+
+    fn format(&mut self, field: &str, f: &Format) {
+        if f.decimals > crate::eval::MAX_DECIMALS {
+            self.err(field, format!("decimals must be between 0 and {}", crate::eval::MAX_DECIMALS));
         }
     }
 
@@ -354,15 +418,20 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                 if !(1.0..=360.0).contains(&g.sweep) {
                     cx.err("sweep", "must be between 1 and 360 degrees");
                 }
+                if let Some(c) = &g.center {
+                    cx.format("center.format", &c.format);
+                }
             }
             WidgetKind::BarGauge(g) => {
                 cw.bindings.push(cx.binding("bind", &g.bind));
                 cw.nums = vec![cx.num("min", &g.min), cx.num("max", &g.max)];
                 cw.zones = cx.zones(&palette, &g.zones);
+                cx.format("format", &g.format);
             }
             WidgetKind::Readout(r) => {
                 cw.bindings.push(cx.binding("bind", &r.bind));
                 cw.zones = cx.zones(&palette, &r.zones);
+                cx.format("format", &r.format);
             }
             WidgetKind::Gear(g) => {
                 cw.bindings.push(cx.binding("bind", &g.bind));
@@ -419,6 +488,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     cw.bindings.push(cx.binding(&format!("signals[{i}]"), b));
                 }
                 cw.zones = cx.zones(&palette, &t.zones);
+                cx.format("format", &t.format);
             }
             WidgetKind::GMeter(g) => {
                 cw.bindings.push(cx.binding("", &Binding::new("accel_lat")));

@@ -43,7 +43,8 @@ DashCluster on the Mac (or another PC), FH5 on the laptop.
 - [ ] **Q** on the computer that receives the game shows a QR code; scanning opens the dashboard
 - [ ] Live at full speed; tapping the right/left edge changes the phone's dashboard only
 - [ ] Middle tap toggles fullscreen (Android); iPhone: Share → Add to Home Screen, then open it
-- [ ] Screen stays on while driving
+- [ ] With auto-lock turned off, the screen stays on while driving (phones don't allow plain-HTTP
+      pages to keep the screen awake by themselves)
 - [ ] Phone shows "Waiting for telemetry" when the game pauses; reconnects if the computer app restarts
 - [ ] The status bar on the computer counts connected displays
 

@@ -20,8 +20,6 @@ pub struct SourceConfig {
     pub record: Option<PathBuf>,
     pub forward: Vec<SocketAddr>,
     pub replay_speed: f32,
-    /// Our own hub's port, so discovery doesn't connect to ourselves.
-    pub own_hub_port: Option<u16>,
 }
 
 pub struct Sources {
@@ -31,16 +29,29 @@ pub struct Sources {
     /// The last non-demo source, so "toggle demo" can go back to it.
     pub primary: SourceKind,
     runner: Option<SourceRunner>,
+    /// Opened once, so restarting the Forza source appends instead of starting over.
+    recorder: Option<source_forza::ctlog::SharedWriter>,
 }
 
 impl Sources {
     pub fn new(bus: Arc<SignalBus>, config: SourceConfig, kind: SourceKind) -> Self {
+        let recorder = config.record.as_deref().and_then(|p| match source_forza::ctlog::Writer::shared(p, "forza") {
+            Ok(w) => {
+                log::info!("recording Forza packets to {}", p.display());
+                Some(w)
+            }
+            Err(e) => {
+                log::error!("can't record to {}: {e}", p.display());
+                None
+            }
+        });
         let mut s = Sources {
             bus,
             config,
             primary: if kind == SourceKind::Demo { SourceKind::Forza } else { kind.clone() },
             kind: kind.clone(),
             runner: None,
+            recorder,
         };
         s.start(kind);
         s
@@ -50,11 +61,14 @@ impl Sources {
         if let Some(mut r) = self.runner.take() {
             r.stop();
         }
+        if self.recorder.is_some() && kind != SourceKind::Forza {
+            log::warn!("--record only records the Forza source; {kind:?} is not recorded");
+        }
         let source: Box<dyn TelemetrySource> = match &kind {
             SourceKind::Demo => Box::new(source_demo::DemoSource::default()),
             SourceKind::Forza => {
                 let mut f = source_forza::ForzaSource::new(self.config.forza_port);
-                f.record = self.config.record.clone();
+                f.record = self.recorder.clone();
                 f.forward = self.config.forward.clone();
                 Box::new(f)
             }
@@ -66,7 +80,7 @@ impl Sources {
             SourceKind::Hub(addr) => Box::new(source_net::HubSource {
                 target: match addr {
                     Some(a) => source_net::HubTarget::Address(a.clone()),
-                    None => source_net::HubTarget::Discover { exclude_port: self.config.own_hub_port },
+                    None => source_net::HubTarget::Discover,
                 },
             }),
         };

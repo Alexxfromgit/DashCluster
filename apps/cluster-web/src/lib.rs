@@ -23,8 +23,19 @@ struct WebState {
     current: String,
     hub_status: (String, String, String),
     ws: Option<WebSocket>,
+    /// The current socket's event handlers; replaced (and freed) on reconnect.
+    handlers: Option<Handlers>,
     connected: bool,
     toast_until: f64,
+    /// The user toggled units on this device: stop following the hub's units.
+    units_overridden: bool,
+}
+
+#[allow(dead_code)] // held only to keep the JS callbacks alive
+struct Handlers {
+    message: Closure<dyn FnMut(MessageEvent)>,
+    open: Closure<dyn FnMut()>,
+    close: Closure<dyn FnMut()>,
 }
 
 fn now_ms() -> f64 {
@@ -58,9 +69,12 @@ fn on_text(ui: &MainWindow, st: &mut WebState, text: &str) {
             if st.current.is_empty() {
                 st.current = current;
             }
-            st.units = if units == "imperial" { UnitPrefs::imperial() } else { UnitPrefs::default() };
-            if let Some(v) = &mut st.view {
-                v.set_units(st.units, &st.snap);
+            if !st.units_overridden && st.units != units {
+                st.units = units;
+                let snap = st.snap.clone();
+                if let Some(v) = &mut st.view {
+                    v.set_units(units, &snap);
+                }
             }
         }
         Ok(ServerMsg::Layout { name, source }) => match Compiled::from_json5(&source) {
@@ -106,7 +120,6 @@ fn connect(ui: slint::Weak<MainWindow>, state: Rc<RefCell<WebState>>) {
         }
     });
     ws.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-    onmessage.forget();
 
     let st3 = state.clone();
     let onopen = Closure::<dyn FnMut()>::new(move || {
@@ -119,7 +132,6 @@ fn connect(ui: slint::Weak<MainWindow>, state: Rc<RefCell<WebState>>) {
         }
     });
     ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-    onopen.forget();
 
     let (ui4, st4) = (ui.clone(), state.clone());
     let onclose = Closure::<dyn FnMut()>::new(move || {
@@ -128,9 +140,16 @@ fn connect(ui: slint::Weak<MainWindow>, state: Rc<RefCell<WebState>>) {
         slint::Timer::single_shot(std::time::Duration::from_secs(1), move || connect(ui5, st5));
     });
     ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-    onclose.forget();
 
-    state.borrow_mut().ws = Some(ws);
+    let mut st = state.borrow_mut();
+    if let Some(old) = st.ws.replace(ws) {
+        old.set_onmessage(None);
+        old.set_onopen(None);
+        old.set_onclose(None);
+        let _ = old.close();
+    }
+    // Dropping the previous socket's handlers frees them (they're no longer referenced).
+    st.handlers = Some(Handlers { message: onmessage, open: onopen, close: onclose });
 }
 
 fn step_dashboard(state: &Rc<RefCell<WebState>>, delta: isize) {
@@ -185,6 +204,7 @@ pub fn start() -> Result<(), JsValue> {
         let (s, weak) = (state.clone(), ui.as_weak());
         ui.on_toggle_units(move || {
             let mut st = s.borrow_mut();
+            st.units_overridden = true;
             st.units = if st.units == UnitPrefs::default() { UnitPrefs::imperial() } else { UnitPrefs::default() };
             let (units, snap) = (st.units, st.snap.clone());
             if let Some(v) = &mut st.view {

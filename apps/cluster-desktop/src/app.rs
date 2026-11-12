@@ -16,10 +16,6 @@ use std::rc::Rc;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-pub fn units_name(u: UnitPrefs) -> &'static str {
-    if u == UnitPrefs::default() { "metric" } else { "imperial" }
-}
-
 /// Points the window at a view's models and canvas.
 pub fn bind_view(ui: &MainWindow, view: &mut DashboardView) {
     let (w, h) = view.canvas();
@@ -56,6 +52,9 @@ pub struct App {
     pub sources: Sources,
     pub bus: Arc<SignalBus>,
     pub web_dir: Option<PathBuf>,
+    /// (label, JSON5 text) of every dashboard, read once per library change instead of on
+    /// every edit.
+    catalog_texts: Vec<(String, String)>,
 }
 
 enum Confirm {
@@ -90,6 +89,15 @@ fn open_in_file_manager(dir: &Path) {
     if let Err(e) = std::process::Command::new(cmd).arg(dir).spawn() {
         log::warn!("couldn't open {}: {e}", dir.display());
     }
+}
+
+/// Parses dashboard text into a JSON object for the editor, with the same size and nesting
+/// limits as loading it.
+fn parse_json5_value(text: &str) -> anyhow::Result<serde_json::Value> {
+    cluster_layout::compile::check_source(text)?;
+    let v: serde_json::Value = json5::from_str(text)?;
+    anyhow::ensure!(v.is_object(), "a dashboard file must contain an object {{ … }}");
+    Ok(v)
 }
 
 impl App {
@@ -132,6 +140,7 @@ impl App {
             sources,
             bus,
             web_dir,
+            catalog_texts: Vec::new(),
         }
     }
 
@@ -265,9 +274,8 @@ impl App {
         }
         let source_changed =
             old.source != s.source || old.forza_port != s.forza_port || old.hub_address != s.hub_address;
-        if source_changed || old.hub_port != s.hub_port {
+        if source_changed {
             self.sources.config.forza_port = s.forza_port;
-            self.sources.config.own_hub_port = s.hub_enabled.then_some(s.hub_port);
             let kind = self.source_kind();
             self.sources.start(kind);
         }
@@ -309,28 +317,27 @@ impl App {
         self.toast_until = Some(Instant::now() + Duration::from_millis(1800));
     }
 
+    /// Re-reads every dashboard's text (after the library or a file changed) and publishes.
+    pub fn refresh_catalog(&mut self) {
+        self.catalog_texts = self.lib.entries.iter().filter_map(|e| e.text().ok().map(|t| (e.label(), t))).collect();
+        self.publish_catalog();
+    }
+
     /// Tells the hub which dashboards exist and which one is showing here. While
     /// editing, phones following this screen see the edits live.
     pub fn publish_catalog(&self) {
         let Some(hub) = &self.hub else { return };
-        let current = self.lib.current().clone();
+        let current = self.lib.current();
+        let editing = self.editor.as_ref().filter(|ed| ed.path.as_deref() == current.path());
         let dashboards = self
-            .lib
-            .entries
+            .catalog_texts
             .iter()
-            .filter_map(|e| {
-                let text = match &self.editor {
-                    Some(ed) if *e == current && ed.path.as_deref() == e.path() => Some(ed.doc.to_text()),
-                    _ => e.text().ok(),
-                };
-                text.map(|t| (e.label(), t))
+            .map(|(label, text)| match editing {
+                Some(ed) if *label == current.label() => (label.clone(), ed.doc.to_text()),
+                _ => (label.clone(), text.clone()),
             })
             .collect();
-        hub.set_catalog(cluster_net::Catalog {
-            dashboards,
-            current: current.label(),
-            units: units_name(self.units).into(),
-        });
+        hub.set_catalog(cluster_net::Catalog { dashboards, current: current.label(), units: self.units });
     }
 
     /// Loads the library's current entry. On error, keeps the old dashboard and shows
@@ -344,7 +351,7 @@ impl App {
                 let ui = self.ui();
                 bind_view(&ui, &mut self.view);
                 ui.set_error_text("".into());
-                self.publish_catalog();
+                self.refresh_catalog();
                 true
             }
             Err(e) => {
@@ -425,7 +432,7 @@ impl App {
 
     fn enter_edit(&mut self) {
         let entry = self.lib.current().clone();
-        let value = match entry.text().and_then(|t| json5::from_str::<serde_json::Value>(&t).map_err(Into::into)) {
+        let value = match entry.text().and_then(|t| parse_json5_value(&t)) {
             Ok(v) => v,
             Err(e) => {
                 self.ui().set_error_text(format!("Can't edit: {e:#}").into());
@@ -583,11 +590,21 @@ impl App {
                 }
             }
         }
+        ed.from_builtin = false;
         self.lib.rescan();
+        if !self.lib.is_listed(&path) {
+            // Saved outside the dashboards folder: keep it in the list from now on.
+            self.lib.add_extra(&path);
+            if !self.saved_settings.extra_dashboards.contains(&path) {
+                self.saved_settings.extra_dashboards.push(path.clone());
+                self.saved_settings.save();
+            }
+        }
         self.lib.select_path(&path);
+        self.remember_dashboard();
         self.watch(Some(path));
         self.sync_editor(false);
-        self.publish_catalog();
+        self.refresh_catalog();
         true
     }
 
@@ -618,10 +635,8 @@ impl App {
         else {
             return;
         };
-        if let Some(ed) = &self.editor
-            && ed.doc.is_dirty()
-            && !self.exit_edit()
-        {
+        let was_editing = self.editor.is_some();
+        if self.editor.as_ref().is_some_and(|ed| ed.doc.is_dirty()) && !self.exit_edit() {
             return;
         }
         let dir = library::user_dir();
@@ -630,6 +645,8 @@ impl App {
             if file.extension().is_some_and(|e| e == "cluster") {
                 editor::import_package(&file, &dir)
             } else {
+                let len = std::fs::metadata(&file)?.len();
+                anyhow::ensure!(len <= cluster_layout::compile::MAX_SOURCE_BYTES as u64, "file is too large");
                 let text = std::fs::read_to_string(&file)?;
                 cluster_layout::Compiled::from_json5(&text)?;
                 let stem = file.file_stem().map_or_else(|| "imported".into(), |s| library::slug(&s.to_string_lossy()));
@@ -640,10 +657,11 @@ impl App {
         })();
         match result {
             Ok(path) => {
-                let was_editing = self.editor.take().is_some();
+                self.editor = None;
                 self.lib.rescan();
                 self.lib.select_path(&path);
                 self.load_current();
+                self.remember_dashboard();
                 self.toast(&format!("Imported {}", self.lib.current().label()));
                 if was_editing {
                     self.enter_edit();
@@ -660,7 +678,7 @@ impl App {
             Some(ed) => (ed.doc.clone(), ed.base_dir(), ed.name()),
             None => {
                 let entry = self.lib.current().clone();
-                let Ok(v) = entry.text().and_then(|t| json5::from_str(&t).map_err(Into::into)) else { return };
+                let Ok(v) = entry.text().and_then(|t| parse_json5_value(&t)) else { return };
                 (Doc::new(v), entry.base_dir(), entry.label())
             }
         };

@@ -418,30 +418,56 @@ pub fn export_package(doc: &Doc, base_dir: Option<&Path>, out: &Path) -> anyhow:
     Ok(n)
 }
 
+/// Limits for importing `.cluster` packages (real ones are a few KB plus a few images).
+const MAX_ENTRIES: usize = 64;
+const MAX_ENTRY_BYTES: u64 = 16 << 20;
+const MAX_TOTAL_BYTES: u64 = 64 << 20;
+const ASSET_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "svg", "webp"];
+
 /// Unpacks a `.cluster` package into a new folder in `dest_root`; returns the path of
-/// its `dashboard.json5`.
+/// its `dashboard.json5`. Only the dashboard and image files are extracted, with size
+/// limits, and the dashboard written is exactly the one that was validated.
 pub fn import_package(pkg: &Path, dest_root: &Path) -> anyhow::Result<PathBuf> {
+    let not_pkg = || anyhow::anyhow!("{} is not a DashCluster package (no dashboard.json5)", pkg.display());
     let mut zip = zip::ZipArchive::new(std::fs::File::open(pkg)?)?;
-    let mut text = String::new();
-    zip.by_name("dashboard.json5")
-        .map_err(|_| anyhow::anyhow!("{} is not a DashCluster package (no dashboard.json5)", pkg.display()))?
-        .read_to_string(&mut text)?;
-    cluster_layout::Compiled::from_json5(&text)?;
-    let stem = pkg.file_stem().map_or_else(|| "imported".into(), |s| crate::library::slug(&s.to_string_lossy()));
-    let dir = crate::library::unique_path(dest_root, &stem, "");
-    std::fs::create_dir_all(&dir)?;
+    anyhow::ensure!(zip.len() <= MAX_ENTRIES, "package has too many files ({})", zip.len());
+
+    let mut files: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+    let mut total = 0u64;
     for i in 0..zip.len() {
-        let mut f = zip.by_index(i)?;
-        let Some(rel) = f.enclosed_name() else { continue };
+        let f = zip.by_index(i)?;
         if f.is_dir() {
             continue;
         }
+        let Some(rel) = f.enclosed_name() else { continue };
+        let is_dashboard = rel == Path::new("dashboard.json5");
+        let is_asset = rel
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| ASSET_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()));
+        if !is_dashboard && !is_asset {
+            continue;
+        }
+        anyhow::ensure!(!files.iter().any(|(p, _)| *p == rel), "package contains {} twice", rel.display());
+        let mut bytes = Vec::new();
+        f.take(MAX_ENTRY_BYTES + 1).read_to_end(&mut bytes)?;
+        anyhow::ensure!(bytes.len() as u64 <= MAX_ENTRY_BYTES, "{} is too large", rel.display());
+        total += bytes.len() as u64;
+        anyhow::ensure!(total <= MAX_TOTAL_BYTES, "package is too large");
+        files.push((rel, bytes));
+    }
+    let (_, dash) = files.iter().find(|(p, _)| p == Path::new("dashboard.json5")).ok_or_else(not_pkg)?;
+    let text = std::str::from_utf8(dash).map_err(|_| anyhow::anyhow!("dashboard.json5 is not UTF-8 text"))?;
+    cluster_layout::Compiled::from_json5(text)?;
+
+    let stem = pkg.file_stem().map_or_else(|| "imported".into(), |s| crate::library::slug(&s.to_string_lossy()));
+    let dir = crate::library::unique_path(dest_root, &stem, "");
+    std::fs::create_dir_all(&dir)?;
+    for (rel, bytes) in files {
         let target = dir.join(rel);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let mut bytes = Vec::new();
-        f.read_to_end(&mut bytes)?;
         std::fs::write(target, bytes)?;
     }
     Ok(dir.join("dashboard.json5"))
@@ -524,6 +550,34 @@ mod tests {
         assert_eq!(std::fs::read(p.parent().unwrap().join("logo.png")).unwrap(), b"\x89PNGfake");
         let again = import_package(&pkg, &dest).unwrap();
         assert!(again.ends_with("my-dash-2/dashboard.json5"));
+
+        // Only the dashboard and images are extracted; duplicates are refused.
+        let odd = dir.join("odd.cluster");
+        {
+            let mut z = zip::ZipWriter::new(std::fs::File::create(&odd).unwrap());
+            let o = zip::write::SimpleFileOptions::default();
+            z.start_file("dashboard.json5", o).unwrap();
+            z.write_all(doc.to_text().as_bytes()).unwrap();
+            z.start_file("run-me.exe", o).unwrap();
+            z.write_all(b"MZ").unwrap();
+            z.finish().unwrap();
+        }
+        let p = import_package(&odd, &dest).unwrap();
+        assert!(!p.parent().unwrap().join("run-me.exe").exists());
+        // (The zip writer itself may refuse duplicate names; then there is nothing to test.)
+        let dup = dir.join("dup.cluster");
+        let written = (|| -> zip::result::ZipResult<()> {
+            let mut z = zip::ZipWriter::new(std::fs::File::create(&dup)?);
+            let o = zip::write::SimpleFileOptions::default();
+            for text in [doc.to_text(), "{ broken".to_owned()] {
+                z.start_file("dashboard.json5", o)?;
+                z.write_all(text.as_bytes())?;
+            }
+            z.finish().map(|_| ())
+        })();
+        if written.is_ok() {
+            assert!(import_package(&dup, &dest).is_err());
+        }
         std::fs::remove_dir_all(dir).ok();
     }
 }

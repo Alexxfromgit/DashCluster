@@ -6,7 +6,9 @@ also reads files that may come from other people: dashboard files, `.cluster` pa
 recordings.
 
 The hub has no authentication: anyone on the same network can open the dashboard and see your
-telemetry. Turn sharing off in Settings on networks you don't trust.
+telemetry. It refuses WebSocket connections from web pages it didn't serve (Origin check), serves
+at most 32 displays, and accepts only tiny messages from them. Turn sharing off in Settings on
+networks you don't trust.
 
 ## Reporting a vulnerability
 
@@ -31,5 +33,6 @@ Of particular interest:
   `apps/cluster-web`).
 - The hub serving anything other than the web display, or being reachable in ways the settings
   don't suggest.
-- Malformed dashboard files, `.cluster` packages (e.g. paths escaping the dashboards folder when
-  importing) and `.ctlog` recordings.
+- Malformed dashboard files (limited to 1 MB and 64 levels of nesting), `.cluster` packages
+  (only the dashboard and images are extracted, with size limits; paths escaping the dashboards
+  folder are refused) and `.ctlog` recordings.

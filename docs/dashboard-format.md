@@ -37,7 +37,7 @@ Anywhere a number is expected (`min`, `max`, zone `from`/`to`, `start`, `limit`,
 |---|---|
 | `analog_gauge` | `bind`, `min`, `max`, `zones`, `major_ticks`, `minor_ticks`, `start_angle`, `sweep`, `caption`, `center: { bind, format }` |
 | `bar_gauge` | `bind`, `min`, `max`, `zones`, `vertical`, `label`, `show_value`, `format` |
-| `readout` | `bind`, `format: { style: number/time/gear/on_off, decimals, unit }`, `label`, `zones`, `align` |
+| `readout` | `bind`, `format: { style: number/time/gear/on_off, decimals (0–6), unit }`, `label`, `zones`, `align` |
 | `gear` | `bind` (default gear), `shift_at` |
 | `shift_lights` | `bind` (default rpm), `start`, `limit`, `segments`, `colors`, `flash_color` |
 | `lamp` | `bind`, `icon`, `color`, `above` (default 0.5) or `below`, `blink` |
@@ -45,8 +45,10 @@ Anywhere a number is expected (`min`, `max`, zone `from`/`to`, `start`, `limit`,
 | `g_meter` | `max_g` |
 | `pedals` | `signals` (1–4), `colors`, `show_labels` |
 | `lap_timer` | `show_last`, `show_best` |
-| `label` | `text` with `{signal}`, `{signal:1}`, `{signal:time}`, `{signal:gear}` placeholders, `align`, `color` |
-| `image` | `src` (relative to the dashboard file), `fit: contain/cover/fill` |
+| `label` | `text` with `{signal}`, `{signal:1}` (0–6 decimals), `{signal:time}`, `{signal:gear}`, `{signal:on_off}` placeholders, `align`, `color` |
+| `image` | `src` (relative to the dashboard file), `fit: contain/cover/fill`. Shown on the computer; phones don't show images yet |
+
+Files are limited to 1 MB and 64 levels of nesting (real dashboards are a few KB).
 
 Every widget also takes `id`, `x`, `y`, `w`, `h`, `z` (layer) and
 `style: { ink, accent, face, muted, danger, font_scale }`. Colors are `#rrggbb[aa]` or a

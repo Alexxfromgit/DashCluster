@@ -3,6 +3,8 @@
 //! [`TelemetrySource`] trait sources implement.
 
 pub mod bus;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod net;
 pub mod signal;
 pub mod snapshot;
 pub mod source;

@@ -12,6 +12,9 @@ $stage = "dist/DashCluster"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item target/release/dashcluster.exe "$stage/DashCluster.exe"
+Copy-Item LICENSE, THIRD-PARTY-NOTICES.md $stage
+cargo run -q --release -p license-notices -- --out "$stage/THIRD-PARTY-LICENSES.txt"
+if ($LASTEXITCODE) { throw "license notices failed" }
 @"
 DashCluster $version
 

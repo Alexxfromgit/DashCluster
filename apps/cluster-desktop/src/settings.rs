@@ -23,6 +23,8 @@ pub struct Settings {
     pub show_status: bool,
     /// The setup guide was shown once.
     pub setup_seen: bool,
+    /// Dashboards saved outside the dashboards folder ("Save as" elsewhere).
+    pub extra_dashboards: Vec<PathBuf>,
 }
 
 impl Default for Settings {
@@ -39,6 +41,7 @@ impl Default for Settings {
             always_on_top: false,
             show_status: true,
             setup_seen: false,
+            extra_dashboards: Vec::new(),
         }
     }
 }

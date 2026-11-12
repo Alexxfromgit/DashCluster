@@ -12,5 +12,6 @@ stage=dist/DashCluster
 rm -rf "$stage" && mkdir -p "$stage"
 cp target/release/dashcluster "$stage/dashcluster"
 cp README.md LICENSE THIRD-PARTY-NOTICES.md "$stage/"
+cargo run -q --release -p license-notices -- --out "$stage/THIRD-PARTY-LICENSES.txt"
 tar -czf "dist/DashCluster-${version}-linux-x64.tar.gz" -C dist DashCluster
 echo "Built dist/DashCluster-${version}-linux-x64.tar.gz"

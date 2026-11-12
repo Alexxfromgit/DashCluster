@@ -7,13 +7,13 @@
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use cluster_core::SignalBus;
 use cluster_core::wire::{self, ClientMsg, ServerMsg};
 use futures_util::{SinkExt, StreamExt};
-use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -21,14 +21,10 @@ use tokio::sync::watch;
 include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
 
 pub const DEFAULT_PORT: u16 = 5380;
-pub const MDNS_SERVICE: &str = "_dashcluster._tcp.local.";
+/// Most displays a hub serves at once (each is a small task streaming at up to 60 Hz).
+pub const MAX_CLIENTS: usize = 32;
 
-/// This machine's LAN address (picks the outgoing interface; sends nothing).
-pub fn lan_ip() -> Option<IpAddr> {
-    let s = UdpSocket::bind("0.0.0.0:0").ok()?;
-    s.connect("192.0.2.1:9").ok()?;
-    s.local_addr().ok().map(|a| a.ip()).filter(|ip| !ip.is_unspecified())
-}
+pub use cluster_core::net::{MDNS_SERVICE, lan_ip};
 
 /// What the hub offers, updated by the app (dashboard switches, hot reloads, units).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -37,8 +33,8 @@ pub struct Catalog {
     pub dashboards: Vec<(String, String)>,
     /// Name of the dashboard shown on the hub machine.
     pub current: String,
-    /// "metric" or "imperial".
-    pub units: String,
+    /// The hub's display units.
+    pub units: cluster_core::UnitPrefs,
 }
 
 impl Catalog {
@@ -158,19 +154,10 @@ impl Drop for Hub {
 
 fn advertise(port: u16) -> anyhow::Result<mdns_sd::ServiceDaemon> {
     let daemon = mdns_sd::ServiceDaemon::new()?;
-    let host = std::env::var("HOSTNAME")
-        .ok()
-        .or_else(|| {
-            std::process::Command::new("hostname")
-                .output()
-                .ok()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-        })
-        .filter(|h| !h.is_empty())
-        .unwrap_or_else(|| "dashcluster".into());
-    let short = host.trim_end_matches(".local").to_owned();
-    let instance = format!("DashCluster on {short}");
-    let info = mdns_sd::ServiceInfo::new(MDNS_SERVICE, &instance, &format!("{short}.local."), "", port, None)?
+    let host = cluster_core::net::host_name();
+    let instance = format!("DashCluster on {host}");
+    let props = [(cluster_core::net::MDNS_ID_KEY, cluster_core::net::instance_id())];
+    let info = mdns_sd::ServiceInfo::new(MDNS_SERVICE, &instance, &format!("{host}.local."), "", port, &props[..])?
         .enable_addr_auto();
     daemon.register(info)?;
     Ok(daemon)
@@ -205,7 +192,10 @@ fn content_type(name: &str) -> &'static str {
 }
 
 fn asset_response(state: &AppState, name: &str) -> Option<Response> {
-    if name.contains("..") || name.contains('/') || name.contains('\\') {
+    let safe = !name.is_empty()
+        && !name.starts_with('.')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if !safe {
         return None;
     }
     let body: Vec<u8> = match &state.web_dir {
@@ -215,8 +205,24 @@ fn asset_response(state: &AppState, name: &str) -> Option<Response> {
     Some(([(header::CONTENT_TYPE, content_type(name)), (header::CACHE_CONTROL, "no-cache")], body).into_response())
 }
 
-async fn ws_handler(ws: WebSocketUpgrade, State((state, counter)): State<Shared>) -> Response {
-    ws.on_upgrade(move |socket| async move {
+/// Browsers send `Origin`; only pages served by this hub may connect (stops other web
+/// pages on the LAN, or DNS rebinding, from reading telemetry). Native clients send none.
+fn origin_allowed(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else { return true };
+    let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) else { return false };
+    let origin_host = origin.split_once("://").map_or(origin, |(_, rest)| rest).trim_end_matches('/');
+    origin_host.eq_ignore_ascii_case(host)
+}
+
+async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap, State((state, counter)): State<Shared>) -> Response {
+    if !origin_allowed(&headers) {
+        return (StatusCode::FORBIDDEN, "cross-origin connections are not allowed").into_response();
+    }
+    if counter.load(std::sync::atomic::Ordering::Relaxed) >= MAX_CLIENTS {
+        return (StatusCode::SERVICE_UNAVAILABLE, "too many displays connected").into_response();
+    }
+    // Displays only send tiny control messages.
+    ws.max_message_size(4096).max_frame_size(4096).on_upgrade(move |socket| async move {
         counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if let Err(e) = client(socket, state).await {
             log::debug!("display disconnected: {e}");
@@ -243,7 +249,7 @@ async fn client(socket: WebSocket, mut state: AppState) -> anyhow::Result<()> {
             version: wire::PROTOCOL_VERSION,
             dashboards: cat.dashboards.iter().map(|(n, _)| n.clone()).collect(),
             current: cat.current.clone(),
-            units: cat.units.clone(),
+            units: cat.units,
         }))
         .await?;
         if let Some(m) = layout_msg(&cat, &cat.current) {
@@ -288,7 +294,7 @@ async fn client(socket: WebSocket, mut state: AppState) -> anyhow::Result<()> {
                     version: wire::PROTOCOL_VERSION,
                     dashboards: cat.dashboards.iter().map(|(n, _)| n.clone()).collect(),
                     current: cat.current.clone(),
-                    units: cat.units.clone(),
+                    units: cat.units,
                 })).await?;
                 let name = chosen.clone().unwrap_or_else(|| cat.current.clone());
                 if let Some(m) = layout_msg(&cat, &name) {
@@ -328,7 +334,7 @@ mod tests {
         let catalog = Catalog {
             dashboards: vec![("race".into(), "{race}".into()), ("gt".into(), "{gt}".into())],
             current: "race".into(),
-            units: "metric".into(),
+            units: cluster_core::UnitPrefs::default(),
         };
         let hub =
             Hub::start(bus.clone(), catalog.clone(), HubConfig { port: 0, advertise: false, ..Default::default() })
@@ -378,5 +384,29 @@ mod tests {
             Ok(out)
         });
         assert!(page.unwrap().contains("200 OK"));
+
+        // A page from another origin may not connect; one served by the hub may.
+        let port = hub.addr.port();
+        let mut req =
+            tungstenite::client::IntoClientRequest::into_client_request(format!("ws://127.0.0.1:{port}/ws")).unwrap();
+        req.headers_mut().insert("Origin", "http://evil.example".parse().unwrap());
+        assert!(tungstenite::connect(req).is_err());
+        let mut req =
+            tungstenite::client::IntoClientRequest::into_client_request(format!("ws://127.0.0.1:{port}/ws")).unwrap();
+        req.headers_mut().insert("Origin", format!("http://127.0.0.1:{port}").parse().unwrap());
+        assert!(tungstenite::connect(req).is_ok());
+    }
+
+    #[test]
+    fn asset_names_are_strict() {
+        let state = AppState {
+            bus: SignalBus::new(),
+            catalog: watch::channel(Catalog::default()).1,
+            rate_hz: 60.0,
+            web_dir: Some(std::env::temp_dir()),
+        };
+        for bad in ["../x", "a/b", "a\\b", "C:foo.txt", "index.html::$DATA", ".hidden", ""] {
+            assert!(asset_response(&state, bad).is_none(), "{bad}");
+        }
     }
 }

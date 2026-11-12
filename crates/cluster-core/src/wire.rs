@@ -6,9 +6,10 @@
 
 use crate::signal::SignalId;
 use crate::snapshot::Snapshot;
+use crate::units::UnitPrefs;
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 const FRAME_TAG: u8 = b'F';
 
 pub fn encode_frame(s: &Snapshot) -> Vec<u8> {
@@ -45,8 +46,8 @@ pub enum ServerMsg {
         dashboards: Vec<String>,
         /// The hub's current dashboard.
         current: String,
-        /// "metric" or "imperial".
-        units: String,
+        /// The hub's display units (each quantity separately).
+        units: UnitPrefs,
     },
     /// A dashboard's JSON5 source.
     Layout {

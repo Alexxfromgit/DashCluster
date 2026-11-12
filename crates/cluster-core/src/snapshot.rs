@@ -1,9 +1,6 @@
 //! A point-in-time set of signal values.
 
 use crate::signal::{SignalId, SignalSet};
-use serde::de::{SeqAccess, Visitor};
-use serde::ser::SerializeSeq;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// One frame of telemetry. Values are in base units (see [`crate::Quantity`]).
 /// A missing value means the source didn't provide that signal in this frame.
@@ -91,54 +88,6 @@ impl std::fmt::Debug for Snapshot {
     }
 }
 
-// Wire format: `[seq, id0, v0, id1, v1, ...]` with only present values. IDs are the
-// numeric index so frames stay small on the network; unknown IDs from a newer peer
-// are skipped.
-impl Serialize for Snapshot {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        #[derive(Serialize)]
-        #[serde(untagged)]
-        enum Item {
-            U(u64),
-            F(f32),
-        }
-        let n = self.iter().count();
-        let mut seq = s.serialize_seq(Some(1 + 2 * n))?;
-        seq.serialize_element(&Item::U(self.seq))?;
-        for (id, v) in self.iter() {
-            seq.serialize_element(&Item::U(id.index() as u64))?;
-            seq.serialize_element(&Item::F(v))?;
-        }
-        seq.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Snapshot {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct V;
-        impl<'de> Visitor<'de> for V {
-            type Value = Snapshot;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a snapshot sequence [seq, id, value, ...]")
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut a: A) -> Result<Snapshot, A::Error> {
-                let mut snap = Snapshot::new();
-                snap.seq = a.next_element::<f64>()?.unwrap_or(0.0) as u64;
-                while let Some(idx) = a.next_element::<f64>()? {
-                    let Some(v) = a.next_element::<f32>()? else {
-                        break;
-                    };
-                    if let Some(id) = SignalId::from_index(idx as usize) {
-                        snap.set(id, v);
-                    }
-                }
-                Ok(snap)
-            }
-        }
-        d.deserialize_seq(V)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,24 +100,5 @@ mod tests {
         assert_eq!(s.get(SignalId::Rpm), Some(4200.0));
         s.set(SignalId::Rpm, f32::INFINITY);
         assert_eq!(s.get(SignalId::Rpm), None);
-    }
-
-    #[test]
-    fn serde_round_trip_is_sparse() {
-        let mut s = Snapshot::new();
-        s.seq = 42;
-        s.set(SignalId::Speed, 33.5);
-        s.set(SignalId::Gear, 4.0);
-        let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(json, format!("[42,{},33.5,{},4.0]", SignalId::Speed.index(), SignalId::Gear.index()));
-        let back: Snapshot = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, s);
-    }
-
-    #[test]
-    fn unknown_ids_are_skipped() {
-        let back: Snapshot = serde_json::from_str("[1, 250, 9.0, 1, 3000.0]").unwrap();
-        assert_eq!(back.get(SignalId::Rpm), Some(3000.0));
-        assert_eq!(back.present().len(), 1);
     }
 }

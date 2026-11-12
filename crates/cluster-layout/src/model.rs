@@ -47,9 +47,6 @@ pub struct Theme {
     pub info: String,
     pub face: String,
     pub edge: String,
-    /// Font family; empty = platform default.
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub font: String,
 }
 
 impl Default for Theme {
@@ -64,7 +61,6 @@ impl Default for Theme {
             info: "#2f81f7".into(),
             face: "#0d1117".into(),
             edge: "#30363d".into(),
-            font: String::new(),
         }
     }
 }

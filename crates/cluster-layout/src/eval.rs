@@ -124,10 +124,12 @@ pub fn parse_template(s: &str) -> Result<Vec<TemplatePart>, String> {
                     "" => (default_style(id), 0),
                     "time" => (FormatStyle::Time, 0),
                     "gear" => (FormatStyle::Gear, 0),
-                    "onoff" => (FormatStyle::OnOff, 0),
+                    "onoff" | "on_off" => (FormatStyle::OnOff, 0),
                     d => (
                         FormatStyle::Number,
-                        d.parse().map_err(|_| format!("bad format {d:?} (use a digit, time, gear or onoff)"))?,
+                        d.parse().ok().filter(|n| *n <= MAX_DECIMALS).ok_or_else(|| {
+                            format!("bad format {d:?} (use 0–{MAX_DECIMALS} decimals, time, gear or on_off)")
+                        })?,
                     ),
                 };
                 if !text.is_empty() {
@@ -164,39 +166,7 @@ const METRIC: UnitPrefs = UnitPrefs {
     acceleration: cluster_core::units::AccelUnit::G,
 };
 
-pub struct Evaluator {
-    compiled: Compiled,
-    units: UnitPrefs,
-    smooth: Vec<[Option<f32>; 4]>,
-    time: f32,
-}
-
-impl Evaluator {
-    pub fn new(compiled: Compiled, units: UnitPrefs) -> Self {
-        let n = compiled.widgets.len();
-        Evaluator { compiled, units, smooth: vec![[None; 4]; n], time: 0.0 }
-    }
-
-    pub fn compiled(&self) -> &Compiled {
-        &self.compiled
-    }
-
-    pub fn units(&self) -> UnitPrefs {
-        self.units
-    }
-
-    /// Moves/resizes a widget without recompiling (live drags in the editor).
-    pub fn set_rect(&mut self, i: usize, [x, y, w, h]: [f32; 4]) {
-        if let Some(wd) = self.compiled.layout.widgets.get_mut(i) {
-            (wd.x, wd.y, wd.w, wd.h) = (x, y, w, h);
-        }
-    }
-
-    pub fn set_units(&mut self, units: UnitPrefs) {
-        self.units = units;
-        self.smooth.iter_mut().for_each(|s| *s = [None; 4]);
-    }
-
+impl Resolver {
     fn unit_differs(&self, q: Quantity) -> bool {
         METRIC.convert(q, 1.0) != self.units.convert(q, 1.0) || METRIC.convert(q, 0.0) != self.units.convert(q, 0.0)
     }
@@ -250,6 +220,97 @@ impl Evaluator {
         }
     }
 
+    fn format(&self, b: &CBinding, f: &Format, snap: &Snapshot) -> String {
+        let raw = snap.get(b.id);
+        match f.style {
+            FormatStyle::Time => raw.map_or_else(|| format_lap_time(f32::NAN), format_lap_time),
+            FormatStyle::Gear => raw.map_or_else(|| "-".into(), format_gear),
+            FormatStyle::OnOff => raw.map_or_else(|| "--".into(), |v| if v > 0.5 { "ON" } else { "OFF" }.into()),
+            FormatStyle::Number => self
+                .shown(b, snap)
+                .map_or_else(|| "--".into(), |v| format!("{:.*}", f.decimals.min(MAX_DECIMALS) as usize, v)),
+        }
+    }
+
+    pub fn render_template(&self, parts: &[TemplatePart], snap: &Snapshot) -> String {
+        let mut s = String::new();
+        for p in parts {
+            match p {
+                TemplatePart::Text(t) => s.push_str(t),
+                TemplatePart::Signal { id, style, decimals } => {
+                    let b = CBinding {
+                        id: *id,
+                        scale: 1.0,
+                        offset: 0.0,
+                        smoothing: 0.0,
+                        ceil_to: None,
+                        convert: true,
+                        fallback: None,
+                    };
+                    s.push_str(&self.format(&b, &Format { style: *style, decimals: *decimals, unit: None }, snap));
+                }
+            }
+        }
+        s
+    }
+}
+
+pub struct Evaluator {
+    compiled: Compiled,
+    r: Resolver,
+    smooth: Vec<[Option<f32>; 4]>,
+    time: f32,
+}
+
+/// Unit-aware value lookups. Separate from [`Evaluator`] so a frame can read the layout and
+/// these while updating the smoothing state, without cloning widgets.
+#[derive(Debug, Clone, Copy)]
+struct Resolver {
+    units: UnitPrefs,
+}
+
+/// Most decimals a number is shown with (also enforced when compiling layouts).
+pub const MAX_DECIMALS: u32 = 6;
+
+fn smoothed(cell: &mut Option<f32>, target: f32, tau: f32, dt: f32) -> f32 {
+    let v = match *cell {
+        Some(prev) if tau > 0.0 && dt > 0.0 => prev + (target - prev) * (1.0 - (-dt / tau).exp()),
+        _ => target,
+    };
+    *cell = Some(v);
+    v
+}
+
+fn zone_color(zones: &[(f32, f32, Rgba)], v: f32, d: Rgba) -> Rgba {
+    zones.iter().find(|(a, b, _)| v >= *a && v < *b).map_or(d, |z| z.2)
+}
+
+impl Evaluator {
+    pub fn new(compiled: Compiled, units: UnitPrefs) -> Self {
+        let n = compiled.widgets.len();
+        Evaluator { compiled, r: Resolver { units }, smooth: vec![[None; 4]; n], time: 0.0 }
+    }
+
+    pub fn compiled(&self) -> &Compiled {
+        &self.compiled
+    }
+
+    pub fn units(&self) -> UnitPrefs {
+        self.r.units
+    }
+
+    /// Moves/resizes a widget without recompiling (live drags in the editor).
+    pub fn set_rect(&mut self, i: usize, [x, y, w, h]: [f32; 4]) {
+        if let Some(wd) = self.compiled.layout.widgets.get_mut(i) {
+            (wd.x, wd.y, wd.w, wd.h) = (x, y, w, h);
+        }
+    }
+
+    pub fn set_units(&mut self, units: UnitPrefs) {
+        self.r.units = units;
+        self.smooth.iter_mut().for_each(|s| *s = [None; 4]);
+    }
+
     pub fn statics(&self, snap: &Snapshot) -> Vec<WidgetStatic> {
         self.compiled
             .widgets
@@ -273,7 +334,7 @@ impl Evaluator {
                     minor_ticks: 0,
                     start_angle: 0.0,
                     sweep: 0.0,
-                    zones: self.zones(cw, snap),
+                    zones: self.r.zones(cw, snap),
                     caption: String::new(),
                     label: String::new(),
                     unit: String::new(),
@@ -291,8 +352,8 @@ impl Evaluator {
                     show_best: true,
                 };
                 let range = |s: &mut WidgetStatic| {
-                    let min = cw.nums.first().and_then(|n| self.num(n, rel, snap)).unwrap_or(0.0);
-                    let max = cw.nums.get(1).and_then(|n| self.num(n, rel, snap)).unwrap_or(min + 1.0);
+                    let min = cw.nums.first().and_then(|n| self.r.num(n, rel, snap)).unwrap_or(0.0);
+                    let max = cw.nums.get(1).and_then(|n| self.r.num(n, rel, snap)).unwrap_or(min + 1.0);
                     s.min = min;
                     s.max = if max > min { max } else { min + 1.0 };
                 };
@@ -308,7 +369,7 @@ impl Evaluator {
                         // Re-round a fixed range that was converted to other units.
                         if let (Some(b), [CNum::Fixed(_), CNum::Fixed(_)]) = (rel, cw.nums.as_slice())
                             && b.convert
-                            && self.unit_differs(b.id.quantity())
+                            && self.r.unit_differs(b.id.quantity())
                         {
                             let (max, ticks) = nice_range(s.min, s.max, s.major_ticks);
                             s.max = max;
@@ -320,7 +381,7 @@ impl Evaluator {
                         if s.caption.is_empty()
                             && let Some(b) = rel
                         {
-                            s.caption = self.unit_label(b, &Format::default());
+                            s.caption = self.r.unit_label(b, &Format::default());
                         }
                     }
                     WidgetKind::BarGauge(g) => {
@@ -329,13 +390,13 @@ impl Evaluator {
                         s.vertical = g.vertical;
                         s.label = g.label.clone();
                         s.show_value = g.show_value;
-                        s.unit = rel.map(|b| self.unit_label(b, &g.format)).unwrap_or_default();
+                        s.unit = rel.map(|b| self.r.unit_label(b, &g.format)).unwrap_or_default();
                     }
                     WidgetKind::Readout(r) => {
                         s.kind = WidgetType::Readout;
                         s.label = r.label.clone();
                         s.align = r.align;
-                        s.unit = rel.map(|b| self.unit_label(b, &r.format)).unwrap_or_default();
+                        s.unit = rel.map(|b| self.r.unit_label(b, &r.format)).unwrap_or_default();
                     }
                     WidgetKind::Gear(_) => s.kind = WidgetType::Gear,
                     WidgetKind::ShiftLights(_) => {
@@ -352,7 +413,7 @@ impl Evaluator {
                     WidgetKind::TyreQuad(t) => {
                         s.kind = WidgetType::TyreQuad;
                         s.label = t.label.clone();
-                        s.unit = rel.map(|b| self.unit_label(b, &t.format)).unwrap_or_default();
+                        s.unit = rel.map(|b| self.r.unit_label(b, &t.format)).unwrap_or_default();
                     }
                     WidgetKind::GMeter(g) => {
                         s.kind = WidgetType::GMeter;
@@ -386,89 +447,63 @@ impl Evaluator {
             .collect()
     }
 
-    fn smoothed(&mut self, w: usize, slot: usize, target: f32, tau: f32, dt: f32) -> f32 {
-        let cell = &mut self.smooth[w][slot];
-        let v = match *cell {
-            Some(prev) if tau > 0.0 && dt > 0.0 => prev + (target - prev) * (1.0 - (-dt / tau).exp()),
-            _ => target,
-        };
-        *cell = Some(v);
-        v
-    }
-
-    fn format(&self, b: &CBinding, f: &Format, snap: &Snapshot) -> String {
-        let raw = snap.get(b.id);
-        match f.style {
-            FormatStyle::Time => raw.map_or_else(|| format_lap_time(f32::NAN), format_lap_time),
-            FormatStyle::Gear => raw.map_or_else(|| "-".into(), format_gear),
-            FormatStyle::OnOff => raw.map_or_else(|| "--".into(), |v| if v > 0.5 { "ON" } else { "OFF" }.into()),
-            FormatStyle::Number => {
-                self.shown(b, snap).map_or_else(|| "--".into(), |v| format!("{:.*}", f.decimals as usize, v))
-            }
-        }
-    }
-
     /// Advances smoothing and blink timers by `dt` seconds and evaluates every widget.
     pub fn frame(&mut self, snap: &Snapshot, dt: f32) -> Vec<WidgetFrame> {
         self.time += dt.max(0.0);
         let blink_fast = (self.time * 8.0).fract() < 0.5;
         let blink_slow = (self.time * 2.0).fract() < 0.6;
-        let n = self.compiled.widgets.len();
-        let mut out = Vec::with_capacity(n);
-        for wi in 0..n {
-            let cw = self.compiled.widgets[wi].clone();
-            let kind = self.compiled.layout.widgets[wi].kind.clone();
+        let r = &self.r;
+        let mut out = Vec::with_capacity(self.compiled.widgets.len());
+        for (wi, (cw, w)) in self.compiled.widgets.iter().zip(&self.compiled.layout.widgets).enumerate() {
+            let cell = &mut self.smooth[wi];
             let mut f = WidgetFrame::default();
             let b0 = cw.bindings.first().copied();
-            let main = b0.and_then(|b| self.shown(&b, snap));
+            let main = b0.and_then(|b| r.shown(&b, snap));
             f.valid = main.is_some();
-            let zone_color = |zones: &[(f32, f32, Rgba)], v: f32, d: Rgba| {
-                zones.iter().find(|(a, b, _)| v >= *a && v < *b).map_or(d, |z| z.2)
-            };
-            match &kind {
+            match &w.kind {
                 WidgetKind::AnalogGauge(g) => {
                     let b = b0.expect("gauge binding");
                     let v = main.unwrap_or(0.0);
-                    f.slots[0].value = self.smoothed(wi, 0, v, b.smoothing, dt);
+                    f.slots[0].value = smoothed(&mut cell[0], v, b.smoothing, dt);
                     f.slots[0].text = match (&g.center, cw.bindings.get(1)) {
-                        (Some(c), Some(cb)) => self.format(cb, &c.format, snap),
-                        _ => self.format(&b, &Format::default(), snap),
+                        (Some(c), Some(cb)) => r.format(cb, &c.format, snap),
+                        _ => r.format(&b, &Format::default(), snap),
                     };
-                    let zones = self.zones(&cw, snap);
+                    let zones = r.zones(cw, snap);
                     f.slots[0].color = zone_color(&zones, v, cw.colors.accent);
                     f.slots[1].color = zone_color(&zones, v, cw.colors.ink);
                 }
                 WidgetKind::BarGauge(g) => {
                     let b = b0.expect("bar binding");
                     let v = main.unwrap_or(0.0);
-                    let min = cw.nums.first().and_then(|n| self.num(n, Some(&b), snap)).unwrap_or(0.0);
-                    let max = cw.nums.get(1).and_then(|n| self.num(n, Some(&b), snap)).unwrap_or(min + 1.0);
+                    let min = cw.nums.first().and_then(|n| r.num(n, Some(&b), snap)).unwrap_or(0.0);
+                    let max = cw.nums.get(1).and_then(|n| r.num(n, Some(&b), snap)).unwrap_or(min + 1.0);
                     let frac = ((v - min) / (max - min).max(f32::EPSILON)).clamp(0.0, 1.0);
-                    f.slots[0].value = self.smoothed(wi, 0, frac, b.smoothing, dt);
-                    f.slots[0].text = self.format(&b, &g.format, snap);
-                    f.slots[0].color = zone_color(&self.zones(&cw, snap), v, cw.colors.accent);
+                    f.slots[0].value = smoothed(&mut cell[0], frac, b.smoothing, dt);
+                    f.slots[0].text = r.format(&b, &g.format, snap);
+                    f.slots[0].color = zone_color(&r.zones(cw, snap), v, cw.colors.accent);
                 }
-                WidgetKind::Readout(r) => {
+                WidgetKind::Readout(ro) => {
                     let b = b0.expect("readout binding");
                     f.slots[0].value = main.unwrap_or(0.0);
-                    f.slots[0].text = self.format(&b, &r.format, snap);
+                    f.slots[0].text = r.format(&b, &ro.format, snap);
                     f.slots[0].color =
-                        main.map_or(cw.colors.muted, |v| zone_color(&self.zones(&cw, snap), v, cw.colors.ink));
+                        main.map_or(cw.colors.muted, |v| zone_color(&r.zones(cw, snap), v, cw.colors.ink));
                 }
                 WidgetKind::Gear(_) => {
                     let b = b0.expect("gear binding");
                     f.slots[0].text = snap.get(b.id).map_or_else(|| "-".into(), format_gear);
                     if let (Some(rpm_b), Some(n)) = (cw.bindings.get(1), cw.nums.first()) {
-                        let rpm = self.shown(rpm_b, snap);
-                        let at = self.num(n, None, snap);
+                        let rpm = r.shown(rpm_b, snap);
+                        let at = r.num(n, None, snap);
                         f.on = matches!((rpm, at), (Some(r), Some(a)) if r >= a);
                     }
                 }
                 WidgetKind::ShiftLights(_) => {
                     let b = b0.expect("shift binding");
                     let v = main.unwrap_or(0.0);
-                    let start = cw.nums.first().and_then(|n| self.num(n, Some(&b), snap));
-                    let limit = cw.nums.get(1).and_then(|n| self.num(n, Some(&b), snap));
+                    let start = cw.nums.first().and_then(|n| r.num(n, Some(&b), snap));
+                    let limit = cw.nums.get(1).and_then(|n| r.num(n, Some(&b), snap));
                     if let (Some(s), Some(l)) = (start, limit) {
                         if v >= l {
                             f.on = true;
@@ -489,11 +524,11 @@ impl Evaluator {
                     f.on = cond && (!l.blink || blink_slow);
                 }
                 WidgetKind::TyreQuad(t) => {
-                    let zones = self.zones(&cw, snap);
+                    let zones = r.zones(cw, snap);
                     for (i, b) in cw.bindings.iter().enumerate().take(4) {
-                        let v = self.shown(b, snap);
+                        let v = r.shown(b, snap);
                         f.slots[i].value = v.unwrap_or(0.0);
-                        f.slots[i].text = self.format(b, &t.format, snap);
+                        f.slots[i].text = r.format(b, &t.format, snap);
                         f.slots[i].color = v.map_or(cw.colors.muted, |v| zone_color(&zones, v, cw.colors.ink));
                     }
                 }
@@ -502,8 +537,8 @@ impl Evaluator {
                     let lon = snap.get(SignalId::AccelLong).map(|v| v / STANDARD_GRAVITY);
                     f.valid = lat.is_some() || lon.is_some();
                     let (lat, lon) = (lat.unwrap_or(0.0), lon.unwrap_or(0.0));
-                    f.slots[0].value = self.smoothed(wi, 0, lat, 0.08, dt);
-                    f.slots[1].value = self.smoothed(wi, 1, lon, 0.08, dt);
+                    f.slots[0].value = smoothed(&mut cell[0], lat, 0.08, dt);
+                    f.slots[1].value = smoothed(&mut cell[1], lon, 0.08, dt);
                     f.slots[0].text = format!("{:.2} g", lat.hypot(lon));
                 }
                 WidgetKind::Pedals(_) => {
@@ -537,25 +572,7 @@ impl Evaluator {
     }
 
     pub fn render_template(&self, parts: &[TemplatePart], snap: &Snapshot) -> String {
-        let mut s = String::new();
-        for p in parts {
-            match p {
-                TemplatePart::Text(t) => s.push_str(t),
-                TemplatePart::Signal { id, style, decimals } => {
-                    let b = CBinding {
-                        id: *id,
-                        scale: 1.0,
-                        offset: 0.0,
-                        smoothing: 0.0,
-                        ceil_to: None,
-                        convert: true,
-                        fallback: None,
-                    };
-                    s.push_str(&self.format(&b, &Format { style: *style, decimals: *decimals, unit: None }, snap));
-                }
-            }
-        }
-        s
+        self.r.render_template(parts, snap)
     }
 }
 

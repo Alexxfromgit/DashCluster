@@ -2,6 +2,7 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod app;
+mod console;
 mod editor;
 mod library;
 mod settings;
@@ -167,7 +168,6 @@ fn source_config(cli: &Cli) -> SourceConfig {
         record: cli.record.clone(),
         forward: cli.forward.clone(),
         replay_speed: cli.replay_speed,
-        own_hub_port: (!cli.no_hub).then_some(cli.hub_port.unwrap_or(cluster_net::DEFAULT_PORT)),
     }
 }
 
@@ -195,11 +195,14 @@ pub(crate) fn qr_image(text: &str) -> slint::Image {
     slint::Image::from_rgb8(buf)
 }
 
-fn library(cli: &Cli) -> anyhow::Result<Library> {
-    let mut lib = Library::new(&cli.dashboards);
+fn library(cli: &Cli, saved_extra: &[PathBuf]) -> anyhow::Result<Library> {
+    let extra: Vec<PathBuf> = cli.dashboards.iter().chain(saved_extra).cloned().collect();
+    let mut lib = Library::new(&extra);
     if let Some(name) = &cli.dashboard {
         anyhow::ensure!(lib.select(name), "no dashboard named {name:?}");
-    } else if let Some(i) = lib.first_extra() {
+    } else if !cli.dashboards.is_empty()
+        && let Some(i) = lib.first_extra()
+    {
         lib.current = i;
     }
     Ok(lib)
@@ -216,7 +219,7 @@ fn snapshot(
     height: Option<u32>,
     overlay: Option<&str>,
 ) -> anyhow::Result<()> {
-    let lib = library(cli)?;
+    let lib = library(cli, &[])?;
     let (compiled, base) = lib.current().load()?;
     let (cw, ch) = (compiled.layout.canvas.width, compiled.layout.canvas.height);
     let height = height.unwrap_or((width as f32 * ch / cw).round() as u32);
@@ -313,7 +316,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     let bus = SignalBus::new();
 
     let ui = MainWindow::new()?;
-    let mut lib = library(cli)?;
+    let mut lib = library(cli, &saved.extra_dashboards)?;
     if cli.dashboard.is_none() && cli.dashboards.is_empty() && !saved.dashboard.is_empty() {
         lib.select(&saved.dashboard);
     }
@@ -322,14 +325,13 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         record: cli.record.clone(),
         forward: cli.forward.clone(),
         replay_speed: cli.replay_speed,
-        own_hub_port: settings.hub_enabled.then_some(settings.hub_port),
     };
     let first_run = !saved.setup_seen;
     ui.set_on_top(settings.always_on_top);
     ui.set_show_status(settings.show_status);
     ui.set_forza_port_text(settings.forza_port.to_string().into());
     ui.set_lan_ip(
-        source_forza::local_ip().map_or_else(|| "this computer's IP address".into(), |ip| ip.to_string()).into(),
+        cluster_core::net::lan_ip().map_or_else(|| "this computer's IP address".into(), |ip| ip.to_string()).into(),
     );
     let start_fullscreen = settings.start_fullscreen;
     let app = Rc::new(RefCell::new(App::new(
@@ -368,7 +370,8 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
         ($setter:ident, |$a:ident $(, $arg:ident)*| $body:expr) => {{
             let app = app.clone();
             ui.$setter(move |$($arg),*| {
-                let mut guard = app.borrow_mut();
+                // A modal dialog (save/open) keeps the app borrowed; ignore events meanwhile.
+                let Ok(mut guard) = app.try_borrow_mut() else { return Default::default() };
                 let $a = &mut *guard;
                 $body
             });
@@ -463,7 +466,7 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     {
         let app = app.clone();
         ui.window().on_close_requested(move || {
-            if app.borrow_mut().exit_edit() {
+            if app.try_borrow_mut().is_ok_and(|mut a| a.exit_edit()) {
                 slint::CloseRequestResponse::HideWindow
             } else {
                 slint::CloseRequestResponse::KeepWindowShown
@@ -482,7 +485,8 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
             let now = Instant::now();
             let dt = (now - last).as_secs_f32();
             last = now;
-            let mut a = app.borrow_mut();
+            // Skip the frame while a modal dialog has the app borrowed.
+            let Ok(mut a) = app.try_borrow_mut() else { return };
             a.poll_reload();
             let frame = bus.latest();
             a.view.update(&frame.snapshot, dt);
@@ -548,12 +552,22 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    if std::env::args_os().len() > 1 {
+        console::attach_parent_console();
+    }
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
     match &cli.command {
         Some(Command::Snapshot { out, seconds, width, live, edit, height, overlay }) => {
             snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height, overlay.as_deref())
         }
-        None => run(&cli),
+        None => run(&cli).inspect_err(|e| {
+            // Started from Finder/Explorer there is no terminal to show the error in.
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("DashCluster couldn't start")
+                .set_description(format!("{e:#}"))
+                .show();
+        }),
     }
 }

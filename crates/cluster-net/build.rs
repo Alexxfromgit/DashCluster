@@ -8,7 +8,11 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/cluster-web/dist"));
     println!("cargo:rerun-if-env-changed=DASHCLUSTER_WEB_DIST");
-    println!("cargo:rerun-if-changed={}", dist.display());
+    // A missing path counts as changed on every build, so watch the parent until dist exists.
+    match (dist.exists(), dist.parent()) {
+        (false, Some(parent)) if parent.exists() => println!("cargo:rerun-if-changed={}", parent.display()),
+        _ => println!("cargo:rerun-if-changed={}", dist.display()),
+    }
     let mut entries = String::new();
     if let Ok(rd) = std::fs::read_dir(&dist) {
         let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect();
