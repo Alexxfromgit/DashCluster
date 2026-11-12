@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/Alexxfromgit/DashCluster/compare/v0.1.0...v0.1.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* build, test and package the Windows release ([e94f548](https://github.com/Alexxfromgit/DashCluster/commit/e94f5486006e85ea83ccc8d5b7a897e038d6fbbf))
+
 ## 0.1.0
 
 
