@@ -37,22 +37,25 @@ pub fn host_name() -> String {
         .or_else(|| {
             std::fs::read_to_string("/etc/hostname").ok().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
         })
-        .or_else(|| {
-            #[cfg(not(windows))]
-            {
-                std::process::Command::new("hostname")
-                    .output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
-                    .filter(|s| !s.is_empty())
-            }
-            #[cfg(windows)]
-            {
-                None
-            }
-        })
+        .or_else(hostname_command)
         .map(|h| h.trim_end_matches(".local").to_owned())
         .unwrap_or_else(|| "dashcluster".into())
+}
+
+/// macOS has no `/etc/hostname` and usually no `HOSTNAME` variable.
+#[cfg(not(windows))]
+fn hostname_command() -> Option<String> {
+    std::process::Command::new("hostname")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+/// Windows always has `COMPUTERNAME`; spawning a program would flash a console window.
+#[cfg(windows)]
+fn hostname_command() -> Option<String> {
+    None
 }
 
 #[cfg(test)]

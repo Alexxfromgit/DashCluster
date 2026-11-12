@@ -50,7 +50,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
 
       # Renders every sample dashboard headlessly (software renderer), including the editor,
       # settings panel and setup guide, so a UI that fails to build or lay out shows up here.

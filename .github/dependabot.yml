@@ -17,6 +17,10 @@ updates:
     # "deps: bump …": dependency updates are listed in the release notes.
     commit-message:
       prefix: deps
+    ignore:
+      # Kept on the same version axum uses, so only one copy is compiled.
+      - dependency-name: tungstenite
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       slint:
         patterns: ["slint", "slint-build"]

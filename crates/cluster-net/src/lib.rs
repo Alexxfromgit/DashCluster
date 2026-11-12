@@ -376,7 +376,8 @@ mod tests {
         assert_eq!(hub.client_count(), 1);
 
         // Fallback page is served even without the web build.
-        let page = std::net::TcpStream::connect(hub.addr).and_then(|mut s| {
+        // The hub listens on 0.0.0.0, which Windows won't connect to; use loopback.
+        let page = std::net::TcpStream::connect(("127.0.0.1", hub.addr.port())).and_then(|mut s| {
             use std::io::{Read, Write};
             s.write_all(b"GET / HTTP/1.0\r\n\r\n")?;
             let mut out = String::new();
