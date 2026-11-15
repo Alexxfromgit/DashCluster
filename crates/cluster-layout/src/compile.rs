@@ -135,6 +135,8 @@ pub struct WidgetColors {
     pub face: Rgba,
     pub danger: Rgba,
     pub edge: Rgba,
+    /// Unit labels (km/h, °C, ...).
+    pub unit: Rgba,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,6 +145,7 @@ pub struct CWidget {
     pub id: String,
     pub colors: WidgetColors,
     pub font_scale: f32,
+    pub font: FontFace,
     /// Bindings referenced by this widget, in slot order (see `eval`).
     pub bindings: Vec<CBinding>,
     pub nums: Vec<CNum>,
@@ -361,6 +364,10 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         face: hex("face", &t.face, base.face),
         edge: hex("edge", &t.edge, base.edge),
     };
+    let theme_unit = match t.unit.as_deref() {
+        Some(spec) => cx.color(&palette, "theme.unit", spec),
+        None => palette.muted,
+    };
     let bg = layout.background.clone();
     let background = (
         cx.color(&palette, "background.color", &bg.color),
@@ -389,12 +396,14 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             face: pick("face", &s.face, palette.face),
             danger: pick("danger", &s.danger, palette.danger),
             edge: pick("edge", &s.edge, palette.edge),
+            unit: pick("unit", &s.unit, theme_unit),
         };
         let mut cw = CWidget {
             index,
             id,
             colors,
             font_scale: s.font_scale.unwrap_or(1.0).clamp(0.2, 5.0),
+            font: s.font.unwrap_or_default(),
             bindings: vec![],
             nums: vec![],
             zones: vec![],
@@ -432,6 +441,12 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                 }
                 if g.vertical && g.ramp_segments != 0 {
                     cx.err("ramp_segments", "requires a horizontal bar");
+                }
+                if g.vertical && g.shape != BarShape::Bar {
+                    cx.err("shape", "center and curve bars must be horizontal");
+                }
+                if g.shape != BarShape::Bar && g.ramp_segments != 0 {
+                    cx.err("shape", "center and curve bars can't use ramp_segments");
                 }
             }
             WidgetKind::Readout(r) => {
@@ -531,7 +546,11 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     cx.err("src", "image path is empty");
                 }
             }
-            WidgetKind::Panel => {}
+            WidgetKind::Panel(p) => {
+                if !p.edges.is_empty() && p.variant != PanelVariant::Divider {
+                    cx.err("edges", "only applies to variant \"divider\"");
+                }
+            }
         }
         widgets.push(cw);
     }

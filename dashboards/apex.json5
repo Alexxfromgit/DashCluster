@@ -1,40 +1,57 @@
-// Twin yellow arcs and a narrow timing column, inspired by modern race displays.
+// Apex — a big yellow tach with the gear in its hub, engine bars at the sides and a yellow timing strip.
 {
   name: "Apex",
-  description: "Twin illuminated arcs for speed and RPM, with gear, lap timing and a lower telemetry strip.",
+  description: "Yellow arc tachometer with the gear in the hub, engine bars, speed and a timing strip.",
   canvas: { width: 1600, height: 900 },
   theme: {
-    ink: "#f5f7fc", muted: "#a9b5c3", accent: "#dfff23", danger: "#ff3e55",
-    warn: "#ffd33d", ok: "#46f779", info: "#54c8ed", face: "#131820", edge: "#3d4654",
+    ink: "#f7f8fa", muted: "#a3acb8", accent: "#ffc414", danger: "#ff2e40",
+    warn: "#ffc414", ok: "#44ef7a", info: "#45c6ff", face: "#08090b", edge: "#2b3038",
+    unit: "#ffc414",
   },
-  background: { color: "#1a1e27", gradient_to: "#090b10", gradient_angle: 150 },
+  background: { color: "#020203" },
   widgets: [
-    { id: "timing_panel", type: "panel", x: 620, y: 152, w: 360, h: 510, z: -1,
-      style: { face: "#0f131a", edge: "#4b5360" } },
-    { id: "footer", type: "panel", x: 36, y: 708, w: 1528, h: 155, z: -1 },
-    { id: "shift", type: "shift_lights", x: 490, y: 42, w: 620, h: 55, segments: 12,
+    { id: "shift", type: "shift_lights", x: 500, y: 16, w: 600, h: 44, segments: 12,
       start: { signal: "rpm_max", scale: 0.65 }, limit: { signal: "rpm_max", scale: 0.96 }, flash_color: "#ffffff" },
-    { id: "speedo", type: "analog_gauge", x: 60, y: 151, w: 515, h: 515, indicator: "arc",
-      bind: { signal: "speed", smoothing: 0.08 }, max: 320, major_ticks: 8, minor_ticks: 2,
-      start_angle: -135, sweep: 270, style: { face: "#0a0e15", edge: "#3b4452" } },
-    { id: "tach", type: "analog_gauge", x: 1025, y: 151, w: 515, h: 515, indicator: "arc",
+
+    // Left: engine bars
+    { id: "boost_lbl", type: "label", x: 40, y: 120, w: 300, h: 36, text: "BOOST", align: "left", color: "muted" },
+    { id: "boost", type: "bar_gauge", x: 40, y: 162, w: 420, h: 62, bind: "boost", min: 0, max: 1.5,
+      format: { decimals: 2 }, style: { face: "#121418" } },
+    { id: "power_lbl", type: "label", x: 40, y: 270, w: 300, h: 36, text: "POWER", align: "left", color: "muted" },
+    { id: "power", type: "bar_gauge", x: 40, y: 312, w: 420, h: 62, bind: "power", min: 0, max: 600,
+      style: { face: "#121418" } },
+    { id: "fuel_lbl", type: "label", x: 40, y: 420, w: 300, h: 36, text: "FUEL", align: "left", color: "muted" },
+    { id: "fuel", type: "bar_gauge", x: 40, y: 462, w: 420, h: 62, bind: "fuel", max: 100,
+      style: { face: "#121418" }, zones: [ { to: 12, color: "danger" } ] },
+
+    // Center tach
+    { id: "tach", type: "analog_gauge", x: 510, y: 70, w: 580, h: 580, indicator: "arc", hub: true,
       bind: { signal: "rpm", scale: 0.001, smoothing: 0.045 },
-      max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 },
+      max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 }, minor_ticks: 4,
       zones: [ { from: { signal: "rpm_max", scale: 0.00092, fallback: 7.36 }, color: "danger" } ],
-      minor_ticks: 2, caption: "GEAR", center: { bind: "gear", format: { style: "gear", unit: "" } },
-      style: { face: "#0a0e15", edge: "#3b4452" } },
-    { id: "rpm", type: "readout", x: 1184, y: 550, w: 198, h: 66, bind: "rpm", label: "RPM",
-      format: { unit: "" }, style: { ink: "accent" } },
-    { id: "position", type: "label", x: 640, y: 188, w: 320, h: 65,
-      text: "P{race_position}  /  LAP {lap_number}", color: "accent" },
-    { id: "lap", type: "readout", x: 647, y: 287, w: 306, h: 116, bind: "lap_time", label: "CURRENT LAP",
-      format: { style: "time" } },
-    { id: "best", type: "readout", x: 647, y: 459, w: 306, h: 122, bind: "best_lap", label: "BEST LAP",
-      format: { style: "time" }, style: { ink: "accent" } },
-    { id: "boost", type: "readout", x: 62, y: 740, w: 300, h: 88, bind: "boost", label: "BOOST", format: { decimals: 2 } },
-    { id: "power", type: "readout", x: 438, y: 740, w: 300, h: 88, bind: "power", label: "POWER" },
-    { id: "torque", type: "readout", x: 832, y: 740, w: 300, h: 88, bind: "torque", label: "TORQUE" },
-    { id: "fuel", type: "bar_gauge", x: 1202, y: 760, w: 329, h: 47, bind: "fuel", label: "FUEL", max: 100,
-      style: { face: "#0a0e15", accent: "#347486" }, zones: [ { to: 12, color: "danger" } ] },
+      caption: "×1000 RPM", center: { bind: "gear", format: { style: "gear", unit: "" } } },
+    { id: "rpm", type: "readout", x: 680, y: 560, w: 240, h: 74, bind: "rpm", format: { unit: "" } },
+
+    // Right: speed and race
+    { id: "speed", type: "readout", x: 1130, y: 110, w: 430, h: 200, bind: "speed", align: "right",
+      style: { font_scale: 1.1 } },
+    { id: "pos", type: "readout", x: 1130, y: 340, w: 200, h: 110, bind: "race_position", label: "POSITION", align: "right" },
+    { id: "lap_no", type: "readout", x: 1360, y: 340, w: 200, h: 110, bind: "lap_number", label: "LAP", align: "right" },
+    { id: "torque", type: "readout", x: 1130, y: 470, w: 430, h: 110, bind: "torque", label: "TORQUE", align: "right" },
+
+    // Lamps
+    { id: "abs", type: "lamp", x: 40, y: 600, w: 96, h: 50, bind: "abs_active", icon: "ABS" },
+    { id: "tc", type: "lamp", x: 148, y: 600, w: 96, h: 50, bind: "tc_active", icon: "TC" },
+    { id: "hb", type: "lamp", x: 256, y: 600, w: 96, h: 50, bind: "handbrake", above: 10, icon: "HB", color: "danger" },
+    { id: "pit", type: "lamp", x: 364, y: 600, w: 96, h: 50, bind: "pit_limiter", icon: "PIT", color: "info" },
+
+    // Timing strip
+    { id: "strip", type: "panel", x: 0, y: 700, w: 1600, h: 200, z: -1, variant: "strip", style: { face: "#ffc414" } },
+    { id: "last", type: "readout", x: 50, y: 720, w: 460, h: 150, bind: "last_lap", label: "LAST LAP", align: "left",
+      format: { style: "time" }, style: { ink: "#0b0b0b", muted: "#3d3000" } },
+    { id: "lap", type: "readout", x: 570, y: 720, w: 460, h: 150, bind: "lap_time", label: "CURRENT",
+      format: { style: "time" }, style: { ink: "#0b0b0b", muted: "#3d3000" } },
+    { id: "best", type: "readout", x: 1090, y: 720, w: 460, h: 150, bind: "best_lap", label: "BEST LAP", align: "right",
+      format: { style: "time" }, style: { ink: "#0b0b0b", muted: "#3d3000" } },
   ],
 }

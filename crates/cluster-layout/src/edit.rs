@@ -91,7 +91,9 @@ fn style() -> Vec<(&'static str, &'static str, PropKind)> {
         p("style.accent", "Accent color", PropKind::Color),
         p("style.face", "Face color", PropKind::Color),
         p("style.edge", "Border color", PropKind::Color),
-        p("style.muted", "Muted color", PropKind::Color),
+        p("style.muted", "Label color", PropKind::Color),
+        p("style.unit", "Unit color", PropKind::Color),
+        p("style.font", "Value font", PropKind::Choice(&["sans", "digital"])),
         p("style.font_scale", "Text size ×", PropKind::Number),
     ]
 }
@@ -124,6 +126,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("start_angle", "Start angle °", PropKind::Number),
                 p("sweep", "Sweep °", PropKind::Number),
                 p("indicator", "Indicator", PropKind::Choice(&["needle", "arc"])),
+                p("hub", "Center hub", PropKind::Bool),
                 p("caption", "Caption", PropKind::Text),
                 p("center", "Center text (JSON)", PropKind::Json),
                 p("zones", "Zones (JSON)", PropKind::Json),
@@ -137,6 +140,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("min", "Min", PropKind::Json),
                 p("max", "Max", PropKind::Json),
                 p("vertical", "Vertical", PropKind::Bool),
+                p("shape", "Shape", PropKind::Choice(&["bar", "center", "curve"])),
                 p("ramp_segments", "Ramp segments (0 = off)", PropKind::Number),
                 p("show_value", "Show value", PropKind::Bool),
                 p("format.decimals", "Decimals", PropKind::Number),
@@ -153,6 +157,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("format.decimals", "Decimals", PropKind::Number),
                 p("format.unit", "Unit label", PropKind::Text),
                 p("align", "Align", PropKind::Choice(ALIGN)),
+                p("label_position", "Label position", PropKind::Choice(&["above", "below"])),
                 p("zones", "Zones (JSON)", PropKind::Json),
             ]);
         }
@@ -161,6 +166,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("", "Gear", PropKind::Header),
                 p("bind.signal", "Signal", PropKind::Signal),
                 p("shift_at", "Highlight at RPM (JSON)", PropKind::Json),
+                p("frame", "Frame", PropKind::Choice(&["none", "box", "hex"])),
             ]);
         }
         "shift_lights" => {
@@ -172,6 +178,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("segments", "Lights", PropKind::Number),
                 p("colors", "Colors (JSON)", PropKind::Json),
                 p("flash_color", "Flash color", PropKind::Color),
+                p("shape", "LED shape", PropKind::Choice(&["round", "bar"])),
             ]);
         }
         "lamp" => {
@@ -188,6 +195,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
         "tyre_quad" => rows.extend([
             p("", "Tyres", PropKind::Header),
             p("label", "Label", PropKind::Text),
+            p("layout", "Layout", PropKind::Choice(&["grid", "car"])),
             p("show_unit", "Show unit", PropKind::Bool),
             p("format.decimals", "Decimals", PropKind::Number),
             p("signals", "Signals (JSON)", PropKind::Json),
@@ -199,11 +207,13 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
             p("signals", "Signals (JSON)", PropKind::Json),
             p("colors", "Colors (JSON)", PropKind::Json),
             p("show_labels", "Labels", PropKind::Bool),
+            p("show_values", "Values", PropKind::Bool),
         ]),
         "lap_timer" => rows.extend([
             p("", "Lap timer", PropKind::Header),
             p("show_last", "Show last lap", PropKind::Bool),
             p("show_best", "Show best lap", PropKind::Bool),
+            p("layout", "Layout", PropKind::Choice(&["stack", "columns"])),
         ]),
         "label" => rows.extend([
             p("", "Label", PropKind::Header),
@@ -220,9 +230,14 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
     }
     if kind == "panel" {
         rows.extend([
+            p("", "Panel", PropKind::Header),
+            p("variant", "Variant", PropKind::Choice(&["box", "divider", "chamfer", "strip"])),
+            p("edges", "Divider edges (JSON)", PropKind::Json),
+            p("title", "Title", PropKind::Text),
             p("", "Style", PropKind::Header),
             p("style.face", "Fill color", PropKind::Color),
             p("style.edge", "Border color", PropKind::Color),
+            p("style.muted", "Title color", PropKind::Color),
         ]);
     } else if kind != "image" {
         rows.extend(style());
@@ -242,9 +257,17 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 "start_angle" => json!(-135),
                 "sweep" => json!(270),
                 "indicator" => json!("needle"),
+                "style.font" => json!("sans"),
+                "shape" if kind == "bar_gauge" => json!("bar"),
+                "shape" if kind == "shift_lights" => json!("round"),
+                "label_position" => json!("above"),
+                "frame" => json!("none"),
+                "layout" if kind == "tyre_quad" => json!("grid"),
+                "layout" if kind == "lap_timer" => json!("stack"),
+                "variant" => json!("box"),
                 "min" => json!(0),
                 "show_value" | "show_labels" | "show_last" | "show_best" => json!(true),
-                "vertical" | "blink" | "show_unit" => json!(false),
+                "vertical" | "blink" | "show_unit" | "hub" | "show_values" => json!(false),
                 "format.decimals" => json!(0),
                 "format.style" => json!("number"),
                 "align" => json!("center"),
@@ -287,6 +310,7 @@ pub fn layout_schema() -> Vec<PropSpec> {
         ("theme.info", "Info"),
         ("theme.face", "Gauge face"),
         ("theme.edge", "Edges"),
+        ("theme.unit", "Units"),
     ] {
         rows.push(p(key, label, PropKind::Color));
     }

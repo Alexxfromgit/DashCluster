@@ -77,6 +77,11 @@ mod tests {
             r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "speed", max: 1, format: { decimals: 7 } }"#,
             r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, ramp_segments: 65 }"#,
             r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, ramp_segments: 4, vertical: true }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "steer", min: -1, max: 1, shape: "center", vertical: true }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, shape: "curve", ramp_segments: 8 }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, shape: "wiggle" }"#,
+            r#"{ type: "panel", x: 0, y: 0, w: 1, h: 1, edges: ["top"] }"#,
+            r#"{ type: "readout", x: 0, y: 0, w: 1, h: 1, bind: "speed", style: { font: "comic" } }"#,
         ] {
             assert!(Compiled::from_json5(&base(bad)).is_err(), "{bad}");
         }

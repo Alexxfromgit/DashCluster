@@ -47,6 +47,9 @@ pub struct Theme {
     pub info: String,
     pub face: String,
     pub edge: String,
+    /// Color of unit labels (km/h, °C, ...). Defaults to `muted`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
 }
 
 impl Default for Theme {
@@ -61,6 +64,7 @@ impl Default for Theme {
             info: "#2f81f7".into(),
             face: "#0d1117".into(),
             edge: "#30363d".into(),
+            unit: None,
         }
     }
 }
@@ -121,9 +125,26 @@ pub struct Style {
     pub edge: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub danger: Option<String>,
+    /// Color of unit labels; defaults to the theme's `unit` color.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
     /// Multiplies the widget's default text size.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub font_scale: Option<f32>,
+    /// Typeface for the widget's values.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font: Option<FontFace>,
+}
+
+/// Typeface for widget values. Labels always use the display sans.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FontFace {
+    /// Condensed motorsport sans (Saira Condensed).
+    #[default]
+    Sans,
+    /// Seven-segment LCD digits (DSEG7 Classic).
+    Digital,
 }
 
 impl Style {
@@ -147,7 +168,7 @@ pub enum WidgetKind {
     LapTimer(LapTimer),
     Label(Label),
     Image(Image),
-    Panel,
+    Panel(Panel),
 }
 
 impl WidgetKind {
@@ -165,7 +186,7 @@ impl WidgetKind {
             WidgetKind::LapTimer(_) => "lap_timer",
             WidgetKind::Label(_) => "label",
             WidgetKind::Image(_) => "image",
-            WidgetKind::Panel => "panel",
+            WidgetKind::Panel(_) => "panel",
         }
     }
 }
@@ -361,6 +382,9 @@ pub struct AnalogGauge {
     /// Text in the gauge center; defaults to the gauge's own value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub center: Option<ValueText>,
+    /// Draws a dark hub disc in the middle that frames the center value.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hub: bool,
 }
 
 fn d8() -> u32 {
@@ -401,6 +425,8 @@ pub struct BarGauge {
     /// Draws a rising segmented strip on horizontal bars. Zero keeps the continuous track.
     #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub ramp_segments: u32,
+    #[serde(default, skip_serializing_if = "BarShape::is_bar")]
+    pub shape: BarShape,
     #[serde(default)]
     pub label: String,
     #[serde(default = "yes")]
@@ -411,6 +437,40 @@ pub struct BarGauge {
 
 fn is_zero_u32(v: &u32) -> bool {
     *v == 0
+}
+
+/// How a bar gauge draws its value.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarShape {
+    /// Fills from `min`.
+    #[default]
+    Bar,
+    /// Fills from zero (or the nearest end of the range) toward the value: gain/loss style.
+    Center,
+    /// A rising band that sweeps up and across, like a race logger's RPM graph.
+    Curve,
+}
+
+impl BarShape {
+    fn is_bar(value: &Self) -> bool {
+        *value == Self::Bar
+    }
+}
+
+/// Where a readout puts its label.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LabelPosition {
+    #[default]
+    Above,
+    Below,
+}
+
+impl LabelPosition {
+    fn is_above(value: &Self) -> bool {
+        *value == Self::Above
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -424,6 +484,8 @@ pub struct Readout {
     pub zones: Vec<Zone>,
     #[serde(default)]
     pub align: Align,
+    #[serde(default, skip_serializing_if = "LabelPosition::is_above")]
+    pub label_position: LabelPosition,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -433,6 +495,25 @@ pub struct Gear {
     /// Highlight the gear when RPM reaches this (same units as `rpm`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shift_at: Option<Num>,
+    #[serde(default, skip_serializing_if = "GearFrame::is_none")]
+    pub frame: GearFrame,
+}
+
+/// Outline drawn around the gear.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GearFrame {
+    #[default]
+    None,
+    Box,
+    /// Chamfered hexagon.
+    Hex,
+}
+
+impl GearFrame {
+    fn is_none(value: &Self) -> bool {
+        *value == Self::None
+    }
 }
 
 fn gear_binding() -> Binding {
@@ -454,6 +535,23 @@ pub struct ShiftLights {
     pub colors: Vec<String>,
     #[serde(default = "info_name")]
     pub flash_color: String,
+    #[serde(default, skip_serializing_if = "LedShape::is_round")]
+    pub shape: LedShape,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LedShape {
+    #[default]
+    Round,
+    /// Rectangular LEDs.
+    Bar,
+}
+
+impl LedShape {
+    fn is_round(value: &Self) -> bool {
+        *value == Self::Round
+    }
 }
 
 fn rpm_binding() -> Binding {
@@ -497,6 +595,24 @@ pub struct TyreQuad {
     pub label: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub show_unit: bool,
+    #[serde(default, skip_serializing_if = "TyreLayout::is_grid")]
+    pub layout: TyreLayout,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TyreLayout {
+    /// Four tiles with the values inside.
+    #[default]
+    Grid,
+    /// A chassis outline with tyres at the corners and the values beside them.
+    Car,
+}
+
+impl TyreLayout {
+    fn is_grid(value: &Self) -> bool {
+        *value == Self::Grid
+    }
 }
 
 fn tyre_signals() -> [Binding; 4] {
@@ -523,6 +639,9 @@ pub struct Pedals {
     pub colors: Vec<String>,
     #[serde(default = "yes")]
     pub show_labels: bool,
+    /// Shows each input's percentage above its bar.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_values: bool,
 }
 
 fn pedal_signals() -> Vec<Binding> {
@@ -538,6 +657,24 @@ pub struct LapTimer {
     pub show_last: bool,
     #[serde(default = "yes")]
     pub show_best: bool,
+    #[serde(default, skip_serializing_if = "LapTimerLayout::is_stack")]
+    pub layout: LapTimerLayout,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LapTimerLayout {
+    /// Current, last and best lap stacked.
+    #[default]
+    Stack,
+    /// Current lap on top, last and best side by side below.
+    Columns,
+}
+
+impl LapTimerLayout {
+    fn is_stack(value: &Self) -> bool {
+        *value == Self::Stack
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -566,4 +703,46 @@ pub struct Image {
     pub src: String,
     #[serde(default)]
     pub fit: ImageFit,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelVariant {
+    /// Rounded box with a fill and a border.
+    #[default]
+    Box,
+    /// Fill with hairlines on the chosen `edges` only.
+    Divider,
+    /// Box with cut corners.
+    Chamfer,
+    /// Square bar with no border, for header and footer strips.
+    Strip,
+}
+
+impl PanelVariant {
+    fn is_box(value: &Self) -> bool {
+        *value == Self::Box
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Edge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Panel {
+    #[serde(skip_serializing_if = "PanelVariant::is_box")]
+    pub variant: PanelVariant,
+    /// Edges that get a hairline with `variant: "divider"` (all four when empty).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub edges: Vec<Edge>,
+    /// Small caption in the panel's top-left corner (or at the left of a strip).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub title: String,
 }
