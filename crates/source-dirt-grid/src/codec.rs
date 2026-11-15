@@ -36,10 +36,16 @@ pub(crate) fn parse(packet: &[u8]) -> Option<Snapshot> {
     snapshot.set(S::Speed, speed);
     snapshot.set(S::Gear, gear);
     snapshot.set(S::Rpm, rpm);
-    for (signal, index) in [(S::RaceTime, 0), (S::LapTime, 1), (S::LapNumber, 36)] {
+    for (signal, index) in [(S::RaceTime, 0), (S::LapTime, 1)] {
         let value = field(index);
         snapshot.set_opt(signal, (value >= 0.0).then_some(value));
     }
+    // The packet counts completed laps; the dashboard shows the lap being driven.
+    let completed_laps = field(36);
+    snapshot.set_opt(
+        S::LapNumber,
+        (completed_laps >= 0.0 && completed_laps.fract() == 0.0).then_some(completed_laps + 1.0),
+    );
     for (signal, index) in [(S::PosX, 4), (S::PosY, 5), (S::PosZ, 6)] {
         snapshot.set(signal, field(index));
     }
@@ -125,6 +131,7 @@ mod tests {
             assert_eq!(s.get(S::Clutch), Some(0.125));
             assert_eq!(s.get(S::AccelLong), Some(STANDARD_GRAVITY));
             assert_eq!(s.get(S::LapTime), Some(12.25));
+            assert_eq!(s.get(S::LapNumber), Some(1.0), "the opening lap is lap 1");
             assert_eq!(s.get(S::Distance), Some(150.0));
             assert_eq!(s.get(S::RpmMax).map(f32::round), (size >= 256).then_some(7500.0));
             assert_eq!(s.get(S::RpmIdle).map(f32::round), (size == 264).then_some(1600.0));
@@ -163,6 +170,7 @@ mod tests {
         assert_eq!(parse(&packet[..152]).unwrap().get(S::Distance), Some(625.0));
         packet[144..148].copy_from_slice(&1.0_f32.to_le_bytes());
         assert_eq!(parse(&packet).unwrap().get(S::Distance), Some(5625.0));
+        assert_eq!(parse(&packet).unwrap().get(S::LapNumber), Some(2.0), "one lap done: on lap 2");
         assert_eq!(parse(&packet[..152]).unwrap().get(S::Distance), None);
     }
 }
