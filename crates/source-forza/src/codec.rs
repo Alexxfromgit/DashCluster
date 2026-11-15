@@ -241,14 +241,14 @@ pub fn encode(format: Format, p: &Packet) -> Vec<u8> {
     put(CYLINDERS, &p.cylinders.to_le_bytes());
     if let (Some(d), Some(dash)) = (format.dash_offset(), &p.dash) {
         let mut putf = |o: usize, v: f32| put(d + o, &v.to_le_bytes());
-        for i in 0..3 {
-            putf(D_POS + 4 * i, dash.position[i]);
+        for (i, &position) in dash.position.iter().enumerate() {
+            putf(D_POS + 4 * i, position);
         }
         putf(D_SPEED, dash.speed);
         putf(D_POWER, dash.power);
         putf(D_TORQUE, dash.torque);
-        for i in 0..4 {
-            putf(D_TIRE_TEMP + 4 * i, dash.tire_temp_f[i]);
+        for (i, &temperature) in dash.tire_temp_f.iter().enumerate() {
+            putf(D_TIRE_TEMP + 4 * i, temperature);
         }
         putf(D_BOOST, dash.boost_psi);
         putf(D_FUEL, dash.fuel);
