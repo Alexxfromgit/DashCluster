@@ -1,5 +1,7 @@
 //! DiRT and GRID telemetry over the legacy Codemasters UDP interface.
 
+#[cfg(test)]
+mod capture_tests;
 mod codec;
 
 use cluster_core::{SourceContext, TelemetrySource, net::receive_snapshots};

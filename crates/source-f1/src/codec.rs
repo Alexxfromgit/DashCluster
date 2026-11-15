@@ -255,6 +255,35 @@ fn float_at(bytes: &[u8], offset: usize) -> f32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn captured_f1_25_player_telemetry() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/f1-2025.ctlog");
+        let (tag, records) = source_forza::ctlog::read(&path).unwrap();
+        assert_eq!(tag, "f1-2025");
+        assert_eq!(records.iter().map(|r| r.payload[6]).collect::<Vec<_>>(), [HISTORY, LAP, STATUS, TELEMETRY]);
+        let sender = "127.0.0.1:1234".parse().unwrap();
+        let mut decoder = Decoder::default();
+        for r in &records[..3] {
+            assert!(decoder.decode(&r.payload, sender).unwrap().is_none());
+        }
+        let frame = decoder.decode(&records[3].payload, sender).unwrap().unwrap();
+        for (signal, expected) in [
+            (S::Speed, 310.0 / 3.6),
+            (S::Rpm, 11006.0),
+            (S::RpmMax, 13099.0),
+            (S::Gear, 8.0),
+            (S::LapNumber, 3.0),
+            (S::RacePosition, 1.0),
+            (S::LapTime, 16.863),
+            (S::LastLap, 109.505),
+            (S::BestLap, 109.505),
+            (S::TyreTempFl, 93.0),
+        ] {
+            let actual = frame.get(signal).unwrap_or_else(|| panic!("missing {}", signal.name()));
+            assert!((actual - expected).abs() < 0.001, "{}: expected {expected}, got {actual}", signal.name());
+        }
+    }
+
     fn packet(year: u16, id: u8, total: usize) -> Vec<u8> {
         let mut packet = vec![0; total];
         packet[..2].copy_from_slice(&year.to_le_bytes());

@@ -12,5 +12,8 @@ repository.workspace = true
 cluster-core.workspace = true
 anyhow.workspace = true
 
+[dev-dependencies]
+source-forza.workspace = true
+
 [lints]
 workspace = true

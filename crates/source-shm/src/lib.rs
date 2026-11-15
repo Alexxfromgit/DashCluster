@@ -4,6 +4,8 @@
 mod acc;
 #[cfg(windows)]
 mod lmu;
+#[cfg(any(windows, test))]
+mod lmu_codec;
 #[cfg(windows)]
 mod windows;
 
