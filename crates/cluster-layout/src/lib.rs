@@ -46,6 +46,34 @@ mod tests {
         }
     }
 
+    /// Instruments must not cover each other, and anything drawn on a panel must sit fully on it.
+    #[test]
+    fn builtin_widgets_do_not_overlap() {
+        use crate::model::{Widget, WidgetKind};
+        let overlap = |a: &Widget, b: &Widget| {
+            (a.x + a.w).min(b.x + b.w) > a.x.max(b.x) && (a.y + a.h).min(b.y + b.h) > a.y.max(b.y)
+        };
+        let inside =
+            |w: &Widget, p: &Widget| w.x >= p.x && w.y >= p.y && w.x + w.w <= p.x + p.w && w.y + w.h <= p.y + p.h;
+        for (name, src) in BUILTIN {
+            let layout = Compiled::from_json5(src).unwrap().layout;
+            let is_panel = |w: &Widget| matches!(w.kind, WidgetKind::Panel(_));
+            for (i, a) in layout.widgets.iter().enumerate() {
+                for b in &layout.widgets[i + 1..] {
+                    if !overlap(a, b) {
+                        continue;
+                    }
+                    match (is_panel(a), is_panel(b)) {
+                        (false, false) => panic!("{name}: {} overlaps {}", a.id, b.id),
+                        (true, false) => assert!(inside(b, a), "{name}: {} sticks out of panel {}", b.id, a.id),
+                        (false, true) => assert!(inside(a, b), "{name}: {} sticks out of panel {}", a.id, b.id),
+                        (true, true) => {}
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn reports_helpful_errors() {
         let src = r##"{ name: "bad", canvas: { width: 100, height: 100 }, widgets: [

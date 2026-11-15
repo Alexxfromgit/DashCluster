@@ -218,7 +218,10 @@ export component AnalogGaugeW inherits Base {
             text: root.fr.t0;
             color: root.fr.c1;
             font-family: root.value-font;
-            font-size: root.side * (root.big-center ? 0.23 : 0.13) * root.value-scale;
+            // Fits within the tick numbers (arc/hub) or between the lower ticks (needle).
+            font-size: min(root.side * (root.big-center ? 0.23 : 0.13) * root.value-scale,
+                root.side * (root.big-center ? (root.arc ? 0.36 : 0.42) : 0.3)
+                    / (max(2, self.text.character-count) * root.glyph-w));
             font-weight: 700;
         }
 
@@ -405,34 +408,50 @@ export component BarGaugeW inherits Base {
         }
     }
 
-    if !root.st.vertical && !root.is-curve: Caption {
-        x: root.pad * 1.5;
-        height: root.height;
-        vertical-alignment: center;
-        text: root.st.label;
-        color: root.st.ink;
-        size: root.height * 0.5 * root.st.font-scale;
-    }
-    if !root.st.vertical && !root.is-curve && root.st.show-value: HorizontalLayout {
-        x: root.width - self.preferred-width - root.pad * 1.5;
-        width: self.preferred-width;
-        height: root.height;
-        spacing: root.height * 0.08;
-        Text {
+    if !root.st.vertical && !root.is-curve && root.st.label != "": Rectangle {
+        x: root.pad * 0.6;
+        y: root.height * 0.14;
+        width: label-text.preferred-width + root.pad * 1.8;
+        height: root.height * 0.72;
+        border-radius: root.height * 0.12;
+        background: root.st.face.transparentize(25%);
+        label-text := Caption {
+            x: root.pad * 0.9;
+            height: parent.height;
             vertical-alignment: center;
-            text: root.fr.t0;
+            text: root.st.label;
             color: root.st.ink;
-            font-family: root.value-font;
-            font-size: root.height * 0.56 * root.value-scale;
-            font-weight: 700;
+            size: root.height * 0.46 * root.st.font-scale;
         }
-        if root.st.unit != "": Text {
-            vertical-alignment: center;
-            text: root.st.unit;
-            color: root.st.unit-color;
-            font-family: DashFonts.sans;
-            font-size: root.height * 0.4 * root.st.font-scale;
-            font-weight: 600;
+    }
+    if !root.st.vertical && !root.is-curve && root.st.show-value: Rectangle {
+        x: root.width - self.width - root.pad * 0.6;
+        y: root.height * 0.14;
+        width: value-row.preferred-width + root.pad * 1.8;
+        height: root.height * 0.72;
+        border-radius: root.height * 0.12;
+        background: root.st.face.transparentize(25%);
+        value-row := HorizontalLayout {
+            x: root.pad * 0.9;
+            width: self.preferred-width;
+            height: parent.height;
+            spacing: root.height * 0.08;
+            Text {
+                vertical-alignment: center;
+                text: root.fr.t0;
+                color: root.st.ink;
+                font-family: root.value-font;
+                font-size: root.height * 0.5 * root.value-scale;
+                font-weight: 700;
+            }
+            if root.st.unit != "": Text {
+                vertical-alignment: center;
+                text: root.st.unit;
+                color: root.st.unit-color;
+                font-family: DashFonts.sans;
+                font-size: root.height * 0.34 * root.st.font-scale;
+                font-weight: 600;
+            }
         }
     }
     if root.st.vertical: Caption {
@@ -461,6 +480,8 @@ export component ReadoutW inherits Base {
     property <bool> below: root.st.variant == 1;
     property <length> label-h: self.has-label ? root.height * 0.24 : 0;
     property <length> value-h: root.height - self.label-h;
+    property <length> unit-size: self.value-h * 0.3 * root.st.font-scale;
+    property <length> unit-w: root.st.unit == "" ? 0 : root.st.unit.character-count * self.unit-size * 0.55 + root.height * 0.04;
     property <TextHorizontalAlignment> ha: root.st.align == 0 ? TextHorizontalAlignment.left : root.st.align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.center;
 
     if root.has-label: Caption {
@@ -486,7 +507,8 @@ export component ReadoutW inherits Base {
             text: root.fr.t0;
             color: root.fr.c0;
             font-family: root.value-font;
-            font-size: root.value-h * 0.84 * root.value-scale;
+            font-size: min(root.value-h * 0.84 * root.value-scale,
+                (root.width - root.unit-w) / (max(1, self.text.character-count) * root.glyph-w));
             font-weight: 700;
         }
         if root.st.unit != "": Text {
@@ -494,7 +516,7 @@ export component ReadoutW inherits Base {
             text: root.st.unit;
             color: root.st.unit-color;
             font-family: DashFonts.sans;
-            font-size: root.value-h * 0.3 * root.st.font-scale;
+            font-size: root.unit-size;
             font-weight: 600;
         }
     }
@@ -769,15 +791,19 @@ export component GMeterW inherits Base {
         Rectangle { width: 1px; height: 100%; background: root.st.edge; }
         Rectangle { height: 1px; width: 100%; background: root.st.edge; }
         Rectangle {
-            property <float> gx: clamp(root.fr.v0 / root.st.max-g, -1, 1);
-            property <float> gy: clamp(root.fr.v1 / root.st.max-g, -1, 1);
+            property <float> rx: root.fr.v0 / root.st.max-g;
+            property <float> ry: root.fr.v1 / root.st.max-g;
+            property <float> len: sqrt(self.rx * self.rx + self.ry * self.ry);
+            property <float> k: self.len > 1 ? 1 / self.len : 1;
+            property <float> gx: self.rx * self.k;
+            property <float> gy: self.ry * self.k;
             property <length> d: root.side * 0.09;
-            x: root.r + root.r * 0.92 * self.gx - self.d / 2;
-            y: root.r - root.r * 0.92 * self.gy - self.d / 2;
+            x: root.r + (root.r - self.d) * self.gx - self.d / 2;
+            y: root.r - (root.r - self.d) * self.gy - self.d / 2;
             width: self.d;
             height: self.d;
             Rectangle {
-                width: parent.width * 2.2;
+                width: parent.width * 1.9;
                 height: self.width;
                 border-radius: self.width / 2;
                 background: @radial-gradient(circle, root.st.accent.transparentize(50%) 0%, root.st.accent.transparentize(100%) 70%);
@@ -913,7 +939,8 @@ export component LabelW inherits Base {
         text: root.fr.t0;
         color: root.fr.c0;
         font-family: root.value-font;
-        font-size: root.height * 0.66 * root.value-scale;
+        font-size: min(root.height * 0.66 * root.value-scale,
+            root.width / (max(1, self.text.character-count) * (root.st.digital ? 0.62 : 0.52)));
         font-weight: 700;
         letter-spacing: root.st.digital ? 0 : root.height * 0.02;
     }

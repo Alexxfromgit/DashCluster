@@ -22,16 +22,16 @@
       style: { face: "#1c1f24", edge: "#e8e8e8", muted: "#ffb21f" } },
 
     { id: "boost", type: "readout", x: 40, y: 90, w: 300, h: 130, bind: "boost", label: "BOOST",
-      label_position: "below", align: "left", format: { decimals: 2, unit: "" } },
-    { id: "power", type: "readout", x: 40, y: 250, w: 300, h: 130, bind: "power", label: "POWER kW",
-      label_position: "below", align: "left", format: { unit: "" } },
+      label_position: "below", align: "left", format: { decimals: 2 } },
+    { id: "power", type: "readout", x: 40, y: 250, w: 300, h: 130, bind: "power", label: "POWER",
+      label_position: "below", align: "left" },
     { id: "tc", type: "lamp", x: 40, y: 430, w: 110, h: 54, bind: "tc_active", icon: "TC" },
     { id: "abs", type: "lamp", x: 164, y: 430, w: 110, h: 54, bind: "abs_active", icon: "ABS" },
 
     { id: "speed", type: "readout", x: 940, y: 90, w: 300, h: 130, bind: "speed", label: "SPEED",
-      label_position: "below", align: "right", format: { unit: "" } },
-    { id: "torque", type: "readout", x: 940, y: 250, w: 300, h: 130, bind: "torque", label: "TORQUE N·m",
-      label_position: "below", align: "right", format: { unit: "" } },
+      label_position: "below", align: "right" },
+    { id: "torque", type: "readout", x: 940, y: 250, w: 300, h: 130, bind: "torque", label: "TORQUE",
+      label_position: "below", align: "right" },
     { id: "pit", type: "lamp", x: 1006, y: 430, w: 110, h: 54, bind: "pit_limiter", icon: "PIT", color: "info" },
     { id: "hb", type: "lamp", x: 1130, y: 430, w: 110, h: 54, bind: "handbrake", above: 10, icon: "HB", color: "danger" },
 

@@ -30,10 +30,12 @@
     { id: "slip", type: "lamp", x: 1450, y: 26, w: 110, h: 44, bind: "slip_rr", above: 100, icon: "SLIP", blink: true },
 
     // Left column: engine
-    { id: "boost", type: "readout", x: 40, y: 120, w: 270, h: 120, bind: "boost", label: "BOOST",
+    { id: "rpm", type: "readout", x: 40, y: 112, w: 270, h: 104, bind: "rpm", label: "RPM",
+      align: "right", format: { unit: "" }, style: { ink: "accent" } },
+    { id: "boost", type: "readout", x: 40, y: 222, w: 270, h: 104, bind: "boost", label: "BOOST",
       align: "right", format: { decimals: 2 } },
-    { id: "power", type: "readout", x: 40, y: 275, w: 270, h: 120, bind: "power", label: "POWER", align: "right" },
-    { id: "torque", type: "readout", x: 40, y: 430, w: 270, h: 120, bind: "torque", label: "TORQUE", align: "right" },
+    { id: "power", type: "readout", x: 40, y: 332, w: 270, h: 104, bind: "power", label: "POWER", align: "right" },
+    { id: "torque", type: "readout", x: 40, y: 442, w: 270, h: 104, bind: "torque", label: "TORQUE", align: "right" },
 
     // Dials
     { id: "speedo", type: "analog_gauge", x: 350, y: 100, w: 450, h: 450, indicator: "arc", hub: true,
@@ -44,8 +46,6 @@
       max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 }, minor_ticks: 2,
       zones: [ { from: { signal: "rpm_max", scale: 0.00092, fallback: 7.36 }, color: "danger" } ],
       caption: "GEAR", center: { bind: "gear", format: { style: "gear", unit: "" } } },
-    { id: "rpm", type: "readout", x: 1060, y: 490, w: 200, h: 80, bind: "rpm", label: "RPM",
-      label_position: "below", align: "right", format: { unit: "" } },
 
     // Right column: chassis
     { id: "tyres", type: "tyre_quad", x: 1290, y: 110, w: 270, h: 280, layout: "car", label: "TYRES", show_unit: true,

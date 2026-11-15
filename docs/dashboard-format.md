@@ -87,3 +87,17 @@ cylinders, pos_x, pos_y, pos_z.
 
 Forza provides most of these; it doesn't send coolant/oil temperature, ABS/TC, lights
 or indicators, so widgets bound to those show "no data" (dimmed) with Forza.
+
+## Checking a layout
+
+Render a dashboard to a PNG with extreme values to make sure nothing overflows or overlaps.
+`--set` takes source units (m/s, rpm, kPa, W, N·m, °C, m/s², seconds; 0–1 for pedals and fuel):
+
+```sh
+dashcluster --dashboards my.json5 -d my.json5 --units imperial snapshot --out check.png \
+  --set speed=100 --set rpm=9850 --set rpm_max=10000 --set gear=-1 --set lap_time=599.999
+```
+
+Values shrink to fit their widget, but a readout that is too narrow for its longest value still gets small.
+The built-in dashboards are tested to keep every instrument inside the canvas, off each other, and fully
+on top of any panel it sits on.

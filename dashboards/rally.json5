@@ -22,7 +22,7 @@
       label_position: "below", format: { unit: "" } },
 
     // Middle row
-    { id: "boost_g", type: "analog_gauge", x: 110, y: 300, w: 270, h: 270, indicator: "arc",
+    { id: "boost_g", type: "analog_gauge", x: 110, y: 330, w: 260, h: 260, indicator: "arc",
       bind: { signal: "boost", smoothing: 0.06 }, min: 0, max: 1.5, major_ticks: 3, minor_ticks: 5,
       start_angle: -110, sweep: 220, caption: "BOOST", center: { bind: "boost", format: { decimals: 2 } },
       zones: [ { from: 1.2, color: "danger" } ] },
@@ -30,8 +30,8 @@
       shift_at: { signal: "rpm_max", scale: 0.93 }, style: { accent: "danger", face: "#0d111b", edge: "#56657c" } },
     { id: "speed_box", type: "panel", x: 1110, y: 300, w: 420, h: 250, z: -1, variant: "chamfer",
       style: { face: "#0d111b", edge: "#56657c" } },
-    { id: "speed", type: "readout", x: 1140, y: 320, w: 360, h: 210, bind: "speed", label: "KM/H",
-      label_position: "below", format: { unit: "" }, style: { font_scale: 1.1 } },
+    { id: "speed", type: "readout", x: 1140, y: 320, w: 360, h: 210, bind: "speed", label: "SPEED",
+      label_position: "below" },
 
     // Bottom row
     { id: "row", type: "panel", x: 30, y: 600, w: 1540, h: 2, z: -1, variant: "strip", style: { face: "#2b3546" } },

@@ -121,6 +121,10 @@ enum Command {
         /// Also show the status bar, settings, guide or QR code (status, settings, guide or qr).
         #[arg(long)]
         overlay: Option<String>,
+        /// Override a signal after the simulation, in source units (repeatable), e.g.
+        /// `--set rpm=9800 --set gear=-1`, to check a layout with extreme values.
+        #[arg(long = "set", value_name = "SIGNAL=VALUE", value_parser = parse_signal_value)]
+        set: Vec<(SignalId, f32)>,
     },
 }
 
@@ -208,6 +212,13 @@ fn library(cli: &Cli, saved_extra: &[PathBuf]) -> anyhow::Result<Library> {
     Ok(lib)
 }
 
+fn parse_signal_value(s: &str) -> Result<(SignalId, f32), String> {
+    let (name, value) = s.split_once('=').ok_or("expected SIGNAL=VALUE")?;
+    let id = SignalId::from_name(name.trim()).ok_or_else(|| format!("unknown signal {name:?}"))?;
+    let value = value.trim().parse::<f32>().map_err(|e| format!("{value:?}: {e}"))?;
+    Ok((id, value))
+}
+
 #[allow(clippy::too_many_arguments)] // mirrors the CLI subcommand's flags
 fn snapshot(
     cli: &Cli,
@@ -218,6 +229,7 @@ fn snapshot(
     edit: Option<&str>,
     height: Option<u32>,
     overlay: Option<&str>,
+    overrides: &[(SignalId, f32)],
 ) -> anyhow::Result<()> {
     let lib = library(cli, &[])?;
     let (compiled, base) = lib.current().load()?;
@@ -245,6 +257,19 @@ fn snapshot(
             view.update(&car.snapshot(), dt);
         }
         (car.snapshot(), "Demo car".to_owned())
+    };
+    let snap = if overrides.is_empty() {
+        snap
+    } else {
+        let mut snap = snap;
+        for &(id, value) in overrides {
+            snap.set(id, value);
+        }
+        // Let smoothed needles settle on the new values.
+        for _ in 0..120 {
+            view.update(&snap, dt);
+        }
+        snap
     };
     view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
@@ -565,8 +590,8 @@ fn main() -> anyhow::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
     match &cli.command {
-        Some(Command::Snapshot { out, seconds, width, live, edit, height, overlay }) => {
-            snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height, overlay.as_deref())
+        Some(Command::Snapshot { out, seconds, width, live, edit, height, overlay, set }) => {
+            snapshot(&cli, out, *seconds, *width, *live, edit.as_deref(), *height, overlay.as_deref(), set)
         }
         None => run(&cli).inspect_err(|e| {
             // Started from Finder/Explorer there is no terminal to show the error in.

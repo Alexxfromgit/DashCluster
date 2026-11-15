@@ -30,14 +30,15 @@
       max: { signal: "rpm_max", scale: 0.001, ceil_to: 1, fallback: 8 }, minor_ticks: 4,
       zones: [ { from: { signal: "rpm_max", scale: 0.00092, fallback: 7.36 }, color: "danger" } ],
       caption: "×1000 RPM", center: { bind: "gear", format: { style: "gear", unit: "" } } },
-    { id: "rpm", type: "readout", x: 680, y: 560, w: 240, h: 74, bind: "rpm", format: { unit: "" } },
 
     // Right: speed and race
     { id: "speed", type: "readout", x: 1130, y: 110, w: 430, h: 200, bind: "speed", align: "right",
       style: { font_scale: 1.1 } },
     { id: "pos", type: "readout", x: 1130, y: 340, w: 200, h: 110, bind: "race_position", label: "POSITION", align: "right" },
     { id: "lap_no", type: "readout", x: 1360, y: 340, w: 200, h: 110, bind: "lap_number", label: "LAP", align: "right" },
-    { id: "torque", type: "readout", x: 1130, y: 470, w: 430, h: 110, bind: "torque", label: "TORQUE", align: "right" },
+    { id: "torque", type: "readout", x: 1130, y: 470, w: 430, h: 105, bind: "torque", label: "TORQUE", align: "right" },
+    { id: "rpm", type: "readout", x: 1130, y: 588, w: 430, h: 100, bind: "rpm", label: "RPM", align: "right",
+      format: { unit: "" }, style: { ink: "accent" } },
 
     // Lamps
     { id: "abs", type: "lamp", x: 40, y: 600, w: 96, h: 50, bind: "abs_active", icon: "ABS" },
