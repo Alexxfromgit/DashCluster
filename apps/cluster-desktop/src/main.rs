@@ -227,7 +227,7 @@ fn snapshot(
     let ui = MainWindow::new()?;
     let mut view = DashboardView::new(compiled, cli.units.unwrap_or(Units::Metric).prefs(), base);
     let dt = 1.0 / 60.0;
-    let snap = if live {
+    let (snap, source_label) = if live {
         let bus = SignalBus::new();
         let _sources = Sources::new(bus.clone(), source_config(cli), source_kind(cli)?);
         let end = Instant::now() + Duration::from_secs_f32(seconds);
@@ -237,14 +237,14 @@ fn snapshot(
         }
         let st = bus.status();
         println!("source: {} · {:?} · {} · {} frames", st.source, st.state, st.detail, bus.publish_count());
-        bus.latest().snapshot.clone()
+        (bus.latest().snapshot.clone(), st.source.clone())
     } else {
         let mut car = source_demo::DemoCar::new();
         for _ in 0..(seconds / dt) as usize {
             car.step(dt);
             view.update(&car.snapshot(), dt);
         }
-        car.snapshot()
+        (car.snapshot(), "Demo car".to_owned())
     };
     view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
@@ -253,7 +253,8 @@ fn snapshot(
         Some("status") => {
             ui.set_show_status(true);
             ui.set_status_text(
-                format!("{} · Demo car · ←/→ dashboards · E edit · P settings · F fullscreen", view.name()).into(),
+                format!("{} · {source_label} · ←/→ dashboards · E edit · P settings · F fullscreen", view.name())
+                    .into(),
             );
         }
         Some("settings") => {
