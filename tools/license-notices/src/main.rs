@@ -34,6 +34,13 @@ fn license_files(dir: &Path) -> Vec<(String, String)> {
     out
 }
 
+/// Fonts compiled into the dashboard UI. The SIL Open Font License asks that its text travel
+/// with the fonts.
+const EMBEDDED_FONTS: &[(&str, &str)] = &[
+    ("Saira Condensed", include_str!("../../../crates/cluster-ui/ui/fonts/OFL-SairaCondensed.txt")),
+    ("DSEG7 Classic", include_str!("../../../crates/cluster-ui/ui/fonts/OFL-DSEG.txt")),
+];
+
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let out_path = args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1));
@@ -99,6 +106,10 @@ fn main() -> anyhow::Result<()> {
     let mut doc = format!(
         "Third-party licenses\n====================\n\nDashCluster (MIT, see LICENSE) is built from {crates} third-party Rust crates.\nTheir license texts follow; identical texts are listed once. The list errs on the side of\ncompleteness and may include crates used only on other platforms. See also\nTHIRD-PARTY-NOTICES.md (Slint, the Inter font, trademarks).\n"
     );
+    for (font, text) in EMBEDDED_FONTS {
+        doc.push_str("\n\n================================================================================\n");
+        doc.push_str(&format!("Font embedded in the dashboards: {font}\n\n{text}\n"));
+    }
     for (text, users) in &by_text {
         doc.push_str("\n\n================================================================================\n");
         doc.push_str("Used by:\n");

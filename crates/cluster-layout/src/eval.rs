@@ -6,7 +6,10 @@
 //! - [`WidgetFrame`]: up to four value/text/color slots plus an on/off flag. Every frame.
 
 use crate::compile::{CBinding, CNum, CWidget, Compiled, Rgba, WidgetColors};
-use crate::model::{Align, DialIndicator, Format, FormatStyle, ImageFit, WidgetKind};
+use crate::model::{
+    Align, BarShape, DialIndicator, Edge, FontFace, Format, FormatStyle, GearFrame, ImageFit, LabelPosition,
+    LapTimerLayout, LedShape, PanelVariant, TyreLayout, WidgetKind,
+};
 use cluster_core::units::{STANDARD_GRAVITY, format_gear, format_lap_time};
 use cluster_core::{Quantity, SignalId, Snapshot, UnitPrefs};
 
@@ -38,6 +41,11 @@ pub struct WidgetStatic {
     pub z: i32,
     pub colors: WidgetColors,
     pub font_scale: f32,
+    pub font: FontFace,
+    /// Widget-specific look, see [`variant`].
+    pub variant: u8,
+    /// Panel hairlines: bit 0 top, 1 bottom, 2 left, 3 right.
+    pub edges: u8,
     pub min: f32,
     pub max: f32,
     pub major_ticks: u32,
@@ -66,6 +74,33 @@ pub struct WidgetStatic {
     pub max_g: f32,
     pub show_last: bool,
     pub show_best: bool,
+}
+
+/// Values of [`WidgetStatic::variant`], per widget type. The UI matches on these numbers.
+pub mod variant {
+    /// analog_gauge: dark hub disc behind the center value.
+    pub const GAUGE_HUB: u8 = 1;
+    /// bar_gauge
+    pub const BAR: u8 = 0;
+    pub const BAR_CENTER: u8 = 1;
+    pub const BAR_CURVE: u8 = 2;
+    /// readout: label under the value.
+    pub const READOUT_LABEL_BELOW: u8 = 1;
+    /// gear
+    pub const GEAR_BOX: u8 = 1;
+    pub const GEAR_HEX: u8 = 2;
+    /// shift_lights: rectangular LEDs.
+    pub const LEDS_BAR: u8 = 1;
+    /// tyre_quad: car outline.
+    pub const TYRES_CAR: u8 = 1;
+    /// pedals: percentages above the bars.
+    pub const PEDALS_VALUES: u8 = 1;
+    /// lap_timer: last and best side by side.
+    pub const LAP_COLUMNS: u8 = 1;
+    /// panel
+    pub const PANEL_DIVIDER: u8 = 1;
+    pub const PANEL_CHAMFER: u8 = 2;
+    pub const PANEL_STRIP: u8 = 3;
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -330,6 +365,9 @@ impl Evaluator {
                     z: w.z,
                     colors: cw.colors,
                     font_scale: cw.font_scale,
+                    font: cw.font,
+                    variant: 0,
+                    edges: 0,
                     min: 0.0,
                     max: 1.0,
                     major_ticks: 0,
@@ -370,6 +408,7 @@ impl Evaluator {
                         s.sweep = g.sweep.clamp(1.0, 360.0);
                         s.dial_indicator = g.indicator;
                         s.caption = g.caption.clone();
+                        s.variant = if g.hub { variant::GAUGE_HUB } else { 0 };
                         if let (Some(center), Some(binding)) = (&g.center, cw.bindings.get(1))
                             && center.show_unit
                         {
@@ -400,6 +439,14 @@ impl Evaluator {
                         s.label = g.label.clone();
                         s.show_value = g.show_value;
                         s.unit = rel.map(|b| self.r.unit_label(b, &g.format)).unwrap_or_default();
+                        s.variant = match g.shape {
+                            BarShape::Bar => variant::BAR,
+                            BarShape::Center => variant::BAR_CENTER,
+                            BarShape::Curve => variant::BAR_CURVE,
+                        };
+                        if g.shape == BarShape::Curve {
+                            s.major_ticks = auto_ticks(s.min, s.max, 8);
+                        }
                         s.segment_colors = (0..g.ramp_segments)
                             .map(|i| {
                                 let fraction = (i as f32 + 0.5) / g.ramp_segments as f32;
@@ -412,11 +459,24 @@ impl Evaluator {
                         s.kind = WidgetType::Readout;
                         s.label = r.label.clone();
                         s.align = r.align;
+                        if r.label_position == LabelPosition::Below {
+                            s.variant = variant::READOUT_LABEL_BELOW;
+                        }
                         s.unit = rel.map(|b| self.r.unit_label(b, &r.format)).unwrap_or_default();
                     }
-                    WidgetKind::Gear(_) => s.kind = WidgetType::Gear,
-                    WidgetKind::ShiftLights(_) => {
+                    WidgetKind::Gear(g) => {
+                        s.kind = WidgetType::Gear;
+                        s.variant = match g.frame {
+                            GearFrame::None => 0,
+                            GearFrame::Box => variant::GEAR_BOX,
+                            GearFrame::Hex => variant::GEAR_HEX,
+                        };
+                    }
+                    WidgetKind::ShiftLights(l) => {
                         s.kind = WidgetType::ShiftLights;
+                        if l.shape == LedShape::Bar {
+                            s.variant = variant::LEDS_BAR;
+                        }
                         let n = cw.extra_colors.len() - 1;
                         s.segment_colors = cw.extra_colors[..n].to_vec();
                         s.color = cw.extra_colors[n];
@@ -429,6 +489,9 @@ impl Evaluator {
                     WidgetKind::TyreQuad(t) => {
                         s.kind = WidgetType::TyreQuad;
                         s.label = t.label.clone();
+                        if t.layout == TyreLayout::Car {
+                            s.variant = variant::TYRES_CAR;
+                        }
                         if t.show_unit {
                             s.unit = rel.map(|b| self.r.unit_label(b, &t.format)).unwrap_or_default();
                         }
@@ -440,6 +503,9 @@ impl Evaluator {
                     WidgetKind::Pedals(p) => {
                         s.kind = WidgetType::Pedals;
                         s.segment_colors = cw.extra_colors.clone();
+                        if p.show_values {
+                            s.variant = variant::PEDALS_VALUES;
+                        }
                         if p.show_labels {
                             s.names = cw.bindings.iter().map(|b| short_label(b.id)).collect();
                         }
@@ -448,6 +514,9 @@ impl Evaluator {
                         s.kind = WidgetType::LapTimer;
                         s.show_last = t.show_last;
                         s.show_best = t.show_best;
+                        if t.layout == LapTimerLayout::Columns {
+                            s.variant = variant::LAP_COLUMNS;
+                        }
                     }
                     WidgetKind::Label(l) => {
                         s.kind = WidgetType::Label;
@@ -459,7 +528,28 @@ impl Evaluator {
                         s.image = i.src.clone();
                         s.image_fit = i.fit;
                     }
-                    WidgetKind::Panel => s.kind = WidgetType::Panel,
+                    WidgetKind::Panel(p) => {
+                        s.kind = WidgetType::Panel;
+                        s.label = p.title.clone();
+                        s.variant = match p.variant {
+                            PanelVariant::Box => 0,
+                            PanelVariant::Divider => variant::PANEL_DIVIDER,
+                            PanelVariant::Chamfer => variant::PANEL_CHAMFER,
+                            PanelVariant::Strip => variant::PANEL_STRIP,
+                        };
+                        s.edges = if p.edges.is_empty() {
+                            0b1111
+                        } else {
+                            p.edges.iter().fold(0, |bits, e| {
+                                bits | match e {
+                                    Edge::Top => 1,
+                                    Edge::Bottom => 2,
+                                    Edge::Left => 4,
+                                    Edge::Right => 8,
+                                }
+                            })
+                        };
+                    }
                 }
                 s
             })
@@ -583,7 +673,7 @@ impl Evaluator {
                     f.slots[0].text = self.render_template(&cw.template, snap);
                     f.slots[0].color = cw.extra_colors[0];
                 }
-                WidgetKind::Image(_) | WidgetKind::Panel => f.valid = true,
+                WidgetKind::Image(_) | WidgetKind::Panel(_) => f.valid = true,
             }
             out.push(f);
         }
@@ -725,6 +815,53 @@ mod tests {
         s.set(SignalId::RpmMax, 5000.0);
         let st = e.statics(&s);
         assert_eq!(st[0].segment_colors, [palette.accent, palette.accent, palette.accent, palette.danger]);
+    }
+
+    #[test]
+    fn looks_reach_the_statics() {
+        let src = r##"{ name: "Looks", canvas: { width: 400, height: 400 },
+            theme: { unit: "info" },
+            widgets: [
+            { type: "panel", x: 0, y: 0, w: 100, h: 100, variant: "divider", edges: ["top", "right"], title: "TYRES" },
+            { type: "panel", x: 0, y: 0, w: 100, h: 100, variant: "strip" },
+            { type: "readout", x: 0, y: 0, w: 100, h: 50, bind: "speed", label_position: "below",
+              style: { font: "digital", unit: "#123456" } },
+            { type: "bar_gauge", x: 0, y: 0, w: 400, h: 100, bind: { signal: "rpm", scale: 0.001 }, max: 8, shape: "curve" },
+            { type: "tyre_quad", x: 0, y: 0, w: 100, h: 100, layout: "car" },
+            { type: "gear", x: 0, y: 0, w: 100, h: 100, frame: "hex" },
+            { type: "analog_gauge", x: 0, y: 0, w: 100, h: 100, bind: "speed", max: 200, hub: true },
+        ] }"##;
+        let e = Evaluator::new(Compiled::from_json5(src).unwrap(), UnitPrefs::default());
+        let palette = e.compiled().palette;
+        let st = e.statics(&Snapshot::new());
+        assert_eq!((st[0].variant, st[0].edges, st[0].label.as_str()), (variant::PANEL_DIVIDER, 0b1001, "TYRES"));
+        assert_eq!((st[1].variant, st[1].edges), (variant::PANEL_STRIP, 0b1111));
+        assert_eq!(st[2].variant, variant::READOUT_LABEL_BELOW);
+        assert_eq!(st[2].font, FontFace::Digital);
+        assert_eq!(st[2].colors.unit, Rgba::rgb(0x12, 0x34, 0x56));
+        assert_eq!(st[3].colors.unit, palette.info, "theme unit color is the default");
+        assert_eq!((st[3].variant, st[3].major_ticks), (variant::BAR_CURVE, 8));
+        assert_eq!(st[4].variant, variant::TYRES_CAR);
+        assert_eq!(st[5].variant, variant::GEAR_HEX);
+        assert_eq!(st[6].variant, variant::GAUGE_HUB);
+        assert_eq!(st[6].font, FontFace::Sans);
+    }
+
+    #[test]
+    fn unit_is_a_theme_color_name() {
+        let src = r##"{ name: "Units", canvas: { width: 400, height: 400 },
+            theme: { unit: "info" },
+            widgets: [
+            { type: "readout", x: 0, y: 0, w: 100, h: 50, bind: "speed", style: { ink: "unit" } },
+        ] }"##;
+        let e = Evaluator::new(Compiled::from_json5(src).unwrap(), UnitPrefs::default());
+        let palette = e.compiled().palette;
+        assert_eq!(palette.unit, palette.info);
+        assert_eq!(e.statics(&Snapshot::new())[0].colors.ink, palette.info);
+
+        let own = r##"{ name: "Units", canvas: { width: 400, height: 400 }, theme: { unit: "unit" }, widgets: [] }"##;
+        let c = Compiled::from_json5(own).unwrap();
+        assert_eq!(c.palette.unit, c.palette.muted, "a self-reference falls back to muted");
     }
 
     #[test]

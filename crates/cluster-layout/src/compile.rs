@@ -51,6 +51,8 @@ pub struct Palette {
     pub info: Rgba,
     pub face: Rgba,
     pub edge: Rgba,
+    /// Unit-label color; the theme's `unit`, or `muted` when unset.
+    pub unit: Rgba,
 }
 
 impl Palette {
@@ -65,6 +67,7 @@ impl Palette {
             "info" => self.info,
             "face" => self.face,
             "edge" => self.edge,
+            "unit" => self.unit,
             "transparent" => Rgba::default(),
             _ => return None,
         })
@@ -77,7 +80,7 @@ impl Palette {
 }
 
 pub const THEME_COLOR_NAMES: &[&str] =
-    &["ink", "muted", "accent", "danger", "warn", "ok", "info", "face", "edge", "transparent"];
+    &["ink", "muted", "accent", "danger", "warn", "ok", "info", "face", "edge", "unit", "transparent"];
 
 /// A problem found while compiling a layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +138,8 @@ pub struct WidgetColors {
     pub face: Rgba,
     pub danger: Rgba,
     pub edge: Rgba,
+    /// Unit labels (km/h, °C, ...).
+    pub unit: Rgba,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,6 +148,7 @@ pub struct CWidget {
     pub id: String,
     pub colors: WidgetColors,
     pub font_scale: f32,
+    pub font: FontFace,
     /// Bindings referenced by this widget, in slot order (see `eval`).
     pub bindings: Vec<CBinding>,
     pub nums: Vec<CNum>,
@@ -343,6 +349,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         info: Rgba::rgb(47, 129, 247),
         face: Rgba::rgb(13, 17, 23),
         edge: Rgba::rgb(48, 54, 61),
+        unit: Rgba::rgb(125, 133, 144),
     };
     let mut hex = |field: &str, spec: &str, dflt: Rgba| {
         Rgba::parse_hex(spec).unwrap_or_else(|| {
@@ -350,7 +357,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             dflt
         })
     };
-    let palette = Palette {
+    let mut palette = Palette {
         ink: hex("ink", &t.ink, base.ink),
         muted: hex("muted", &t.muted, base.muted),
         accent: hex("accent", &t.accent, base.accent),
@@ -360,6 +367,14 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         info: hex("info", &t.info, base.info),
         face: hex("face", &t.face, base.face),
         edge: hex("edge", &t.edge, base.edge),
+        unit: base.unit,
+    };
+    // `theme.unit` may name another theme color; while it is resolved,
+    // `unit` means `muted`, its default.
+    palette.unit = palette.muted;
+    palette.unit = match t.unit.as_deref() {
+        Some(spec) => cx.color(&palette, "theme.unit", spec),
+        None => palette.muted,
     };
     let bg = layout.background.clone();
     let background = (
@@ -389,12 +404,14 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             face: pick("face", &s.face, palette.face),
             danger: pick("danger", &s.danger, palette.danger),
             edge: pick("edge", &s.edge, palette.edge),
+            unit: pick("unit", &s.unit, palette.unit),
         };
         let mut cw = CWidget {
             index,
             id,
             colors,
             font_scale: s.font_scale.unwrap_or(1.0).clamp(0.2, 5.0),
+            font: s.font.unwrap_or_default(),
             bindings: vec![],
             nums: vec![],
             zones: vec![],
@@ -432,6 +449,12 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                 }
                 if g.vertical && g.ramp_segments != 0 {
                     cx.err("ramp_segments", "requires a horizontal bar");
+                }
+                if g.vertical && g.shape != BarShape::Bar {
+                    cx.err("shape", "center and curve bars must be horizontal");
+                }
+                if g.shape != BarShape::Bar && g.ramp_segments != 0 {
+                    cx.err("shape", "center and curve bars can't use ramp_segments");
                 }
             }
             WidgetKind::Readout(r) => {
@@ -531,7 +554,11 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     cx.err("src", "image path is empty");
                 }
             }
-            WidgetKind::Panel => {}
+            WidgetKind::Panel(p) => {
+                if !p.edges.is_empty() && p.variant != PanelVariant::Divider {
+                    cx.err("edges", "only applies to variant \"divider\"");
+                }
+            }
         }
         widgets.push(cw);
     }

@@ -16,6 +16,15 @@ About) and in the README.
 Slint embeds the [Inter](https://rsms.me/inter/) typeface, © The Inter Project Authors, under the
 **SIL Open Font License 1.1** (<https://openfontlicense.org>).
 
+## Dashboard fonts
+
+The dashboards use two typefaces embedded in the app, both under the **SIL Open Font License 1.1**
+(license texts in `crates/cluster-ui/ui/fonts/` and in `THIRD-PARTY-LICENSES.txt`):
+
+- [Saira Condensed](https://github.com/Omnibus-Type/Saira), © 2016 The Saira Project Authors,
+  with Reserved Font Name "Saira".
+- [DSEG7 Classic](https://github.com/keshikan/DSEG), © 2017 keshikan, with Reserved Font Name "DSEG".
+
 ## Rust crates
 
 The application statically links Rust libraries from [crates.io](https://crates.io). Almost all are

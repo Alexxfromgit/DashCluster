@@ -19,15 +19,15 @@ for tall phones. At other aspect ratios, the instruments scale together and the 
 
 ### Grand Tourer
 
-![Grand Tourer with blue needle gauges and a full-width telemetry strip](docs/images/grand-tourer.png)
+![Grand Tourer with twin midnight-blue dials, dark hubs and a chamfered center panel](docs/images/grand-tourer.png)
 
 | Race | Rally |
 |---|---|
-| ![Race with live tyre temperatures and pedal inputs](docs/images/race.png) | ![Rally with speed inside a cyan tachometer](docs/images/rally.png) |
+| ![Race with lime twin arcs, a car tyre map and a long-g bar](docs/images/race.png) | ![Rally with a rising rainbow RPM ramp and a hexagonal gear box](docs/images/rally.png) |
 | **Endurance** | **Club Sport** |
-| ![Endurance with lap timing and a central gear indicator](docs/images/endurance.png) | ![Club Sport with a yellow tachometer on graphite](docs/images/club-sport.png) |
+| ![Endurance with seven-segment gear, speed and lap times in outlined boxes](docs/images/endurance.png) | ![Club Sport with the gear inside a needle tachometer's hub and amber labels](docs/images/club-sport.png) |
 | **Sprint** | **Apex** |
-| ![Sprint with a white rising RPM strip](docs/images/sprint.png) | ![Apex with bright yellow dual arcs on black](docs/images/apex.png) |
+| ![Sprint with a white RPM graph curving up under a big gear](docs/images/sprint.png) | ![Apex with a yellow arc tachometer and a yellow timing strip](docs/images/apex.png) |
 
 ### Heritage
 
@@ -35,7 +35,7 @@ for tall phones. At other aspect ratios, the instruments scale together and the 
 
 ### Phone Portrait
 
-<img src="docs/images/phone.png" width="300" alt="Phone Portrait with a large gear and speed display above lap times and pedal inputs">
+<img src="docs/images/phone.png" width="300" alt="Phone Portrait with a hexagonal gear box and speed above lap times and pedal inputs">
 
 ### Visual editor
 
@@ -152,6 +152,7 @@ with the real game).
 
 [MIT](LICENSE). DashCluster uses [Slint](https://slint.dev) under the Slint Royalty-free License
 and other open-source libraries; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Every
-download includes the full license texts (`THIRD-PARTY-LICENSES.txt`). The dashboard
-designs are original. Forza, Forza Horizon and Forza Motorsport are trademarks of Microsoft; this
+download includes the full license texts (`THIRD-PARTY-LICENSES.txt`). Dashboards are set in
+[Saira Condensed](https://github.com/Omnibus-Type/Saira) and [DSEG7](https://github.com/keshikan/DSEG),
+both under the SIL Open Font License 1.1. The dashboard designs are original. Forza, Forza Horizon and Forza Motorsport are trademarks of Microsoft; this
 project is not affiliated with or endorsed by Microsoft or Playground Games.

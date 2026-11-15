@@ -5,7 +5,7 @@ use cluster_core::{Snapshot, UnitPrefs};
 use cluster_layout::Compiled;
 use cluster_layout::compile::Rgba;
 use cluster_layout::eval::{Evaluator, WidgetFrame, WidgetStatic, WidgetType};
-use cluster_layout::model::{Align, DialIndicator, ImageFit};
+use cluster_layout::model::{Align, DialIndicator, FontFace, ImageFit};
 use slint::{Color, Model, ModelRc, SharedString, VecModel};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -217,6 +217,10 @@ impl DashboardView {
             danger: color(s.colors.danger),
             edge: color(s.colors.edge),
             font_scale: s.font_scale,
+            digital: s.font == FontFace::Digital,
+            variant: i32::from(s.variant),
+            edges: i32::from(s.edges),
+            unit_color: color(s.colors.unit),
             min: s.min,
             max: s.max,
             major: s.major_ticks as i32,
