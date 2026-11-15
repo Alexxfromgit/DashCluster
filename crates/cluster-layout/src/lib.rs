@@ -17,6 +17,11 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("race.json5", include_str!("../../../dashboards/race.json5")),
     ("rally.json5", include_str!("../../../dashboards/rally.json5")),
     ("phone-portrait.json5", include_str!("../../../dashboards/phone-portrait.json5")),
+    ("endurance.json5", include_str!("../../../dashboards/endurance.json5")),
+    ("club-sport.json5", include_str!("../../../dashboards/club-sport.json5")),
+    ("sprint.json5", include_str!("../../../dashboards/sprint.json5")),
+    ("apex.json5", include_str!("../../../dashboards/apex.json5")),
+    ("heritage.json5", include_str!("../../../dashboards/heritage.json5")),
 ];
 
 #[cfg(test)]
@@ -24,10 +29,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_dashboards_compile() {
+    fn builtin_dashboards_compile_and_fit_canvas() {
         for (name, src) in BUILTIN {
-            if let Err(e) = Compiled::from_json5(src) {
-                panic!("{name}: {e}");
+            let compiled = Compiled::from_json5(src).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let canvas = compiled.layout.canvas;
+            for widget in &compiled.layout.widgets {
+                assert!(
+                    widget.x >= 0.0
+                        && widget.y >= 0.0
+                        && widget.x + widget.w <= canvas.width
+                        && widget.y + widget.h <= canvas.height,
+                    "{name}: {} extends past the canvas",
+                    widget.id,
+                );
             }
         }
     }
@@ -61,6 +75,8 @@ mod tests {
             r#"{ type: "readout", x: 0, y: 0, w: 1, h: 1, bind: "speed", format: { decimals: 70000 } }"#,
             r#"{ type: "label", x: 0, y: 0, w: 1, h: 1, text: "{speed:99999}" }"#,
             r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "speed", max: 1, format: { decimals: 7 } }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, ramp_segments: 65 }"#,
+            r#"{ type: "bar_gauge", x: 0, y: 0, w: 1, h: 1, bind: "rpm", max: 8000, ramp_segments: 4, vertical: true }"#,
         ] {
             assert!(Compiled::from_json5(&base(bad)).is_err(), "{bad}");
         }

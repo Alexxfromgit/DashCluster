@@ -118,6 +118,8 @@ pub struct Style {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub face: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub edge: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub danger: Option<String>,
     /// Multiplies the widget's default text size.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -145,6 +147,7 @@ pub enum WidgetKind {
     LapTimer(LapTimer),
     Label(Label),
     Image(Image),
+    Panel,
 }
 
 impl WidgetKind {
@@ -162,6 +165,7 @@ impl WidgetKind {
             WidgetKind::LapTimer(_) => "lap_timer",
             WidgetKind::Label(_) => "label",
             WidgetKind::Image(_) => "image",
+            WidgetKind::Panel => "panel",
         }
     }
 }
@@ -320,6 +324,20 @@ pub enum Align {
     Right,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DialIndicator {
+    #[default]
+    Needle,
+    Arc,
+}
+
+impl DialIndicator {
+    fn is_needle(value: &Self) -> bool {
+        *value == Self::Needle
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnalogGauge {
     pub bind: Binding,
@@ -336,6 +354,8 @@ pub struct AnalogGauge {
     pub start_angle: f32,
     #[serde(default = "d_sweep")]
     pub sweep: f32,
+    #[serde(default, skip_serializing_if = "DialIndicator::is_needle")]
+    pub indicator: DialIndicator,
     #[serde(default)]
     pub caption: String,
     /// Text in the gauge center; defaults to the gauge's own value.
@@ -364,6 +384,8 @@ pub struct ValueText {
     pub bind: Binding,
     #[serde(default)]
     pub format: Format,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_unit: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -376,12 +398,19 @@ pub struct BarGauge {
     pub zones: Vec<Zone>,
     #[serde(default)]
     pub vertical: bool,
+    /// Draws a rising segmented strip on horizontal bars. Zero keeps the continuous track.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub ramp_segments: u32,
     #[serde(default)]
     pub label: String,
     #[serde(default = "yes")]
     pub show_value: bool,
     #[serde(default)]
     pub format: Format,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -466,6 +495,8 @@ pub struct TyreQuad {
     pub format: Format,
     #[serde(default)]
     pub label: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub show_unit: bool,
 }
 
 fn tyre_signals() -> [Binding; 4] {

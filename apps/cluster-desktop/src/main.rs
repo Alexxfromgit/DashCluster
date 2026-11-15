@@ -24,8 +24,8 @@ use std::time::{Duration, Instant};
 #[derive(Parser)]
 #[command(name = "dashcluster", version, about = "Digital instrument cluster")]
 struct Cli {
-    /// Dashboard to show first: a built-in name (grand-tourer, race, rally,
-    /// phone-portrait) or the name/path of one of the --dashboards files.
+    /// Dashboard to show first: a built-in name (such as grand-tourer or sprint)
+    /// or the name/path of one of the --dashboards files.
     #[arg(long, short = 'd', global = true)]
     dashboard: Option<String>,
     /// Extra dashboard files or folders to load (hot-reloaded on save).
@@ -118,7 +118,7 @@ enum Command {
         /// Image height (default: follows the dashboard's aspect ratio).
         #[arg(long)]
         height: Option<u32>,
-        /// Also show an overlay: settings, guide or qr.
+        /// Also show the status bar, settings, guide or QR code (status, settings, guide or qr).
         #[arg(long)]
         overlay: Option<String>,
     },
@@ -227,7 +227,7 @@ fn snapshot(
     let ui = MainWindow::new()?;
     let mut view = DashboardView::new(compiled, cli.units.unwrap_or(Units::Metric).prefs(), base);
     let dt = 1.0 / 60.0;
-    let snap = if live {
+    let (snap, source_label) = if live {
         let bus = SignalBus::new();
         let _sources = Sources::new(bus.clone(), source_config(cli), source_kind(cli)?);
         let end = Instant::now() + Duration::from_secs_f32(seconds);
@@ -237,19 +237,26 @@ fn snapshot(
         }
         let st = bus.status();
         println!("source: {} · {:?} · {} · {} frames", st.source, st.state, st.detail, bus.publish_count());
-        bus.latest().snapshot.clone()
+        (bus.latest().snapshot.clone(), st.source.clone())
     } else {
         let mut car = source_demo::DemoCar::new();
         for _ in 0..(seconds / dt) as usize {
             car.step(dt);
             view.update(&car.snapshot(), dt);
         }
-        car.snapshot()
+        (car.snapshot(), "Demo car".to_owned())
     };
     view.refresh_statics(&snap, false);
     bind_view(&ui, &mut view);
     ui.set_show_status(false);
     match overlay {
+        Some("status") => {
+            ui.set_show_status(true);
+            ui.set_status_text(
+                format!("{} · {source_label} · ←/→ dashboards · E edit · P settings · F fullscreen", view.name())
+                    .into(),
+            );
+        }
         Some("settings") => {
             let s = settings::Settings { units: cluster_core::UnitPrefs::imperial(), ..Default::default() };
             ui.set_ui_settings(cluster_ui::UiSettings {

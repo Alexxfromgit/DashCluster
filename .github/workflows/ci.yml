@@ -60,9 +60,15 @@ jobs:
           mkdir -p snapshots
           bin=target/debug/dashcluster
           cargo build -p cluster-desktop
-          for d in grand-tourer race rally phone-portrait; do
-            "$bin" snapshot -d "$d" --width 1200 --out "snapshots/$d.png"
+          for file in dashboards/*.json5; do
+            d="$(basename "$file" .json5)"
+            if [ "$d" = phone-portrait ]; then
+              "$bin" snapshot -d "$d" --width 390 --height 844 --out "snapshots/$d.png"
+            else
+              "$bin" snapshot -d "$d" --width 1280 --height 720 --out "snapshots/$d.png"
+            fi
           done
+          "$bin" snapshot -d race --overlay status --width 1024 --height 600 --out snapshots/status.png
           "$bin" snapshot -d race --edit gear --width 1600 --height 900 --out snapshots/editor.png
           "$bin" snapshot -d race --overlay settings --width 1280 --height 800 --out snapshots/settings.png
           "$bin" snapshot -d race --overlay guide --width 1280 --height 800 --out snapshots/guide.png
