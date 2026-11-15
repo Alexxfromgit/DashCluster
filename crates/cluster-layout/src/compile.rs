@@ -388,7 +388,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             accent: pick("accent", &s.accent, palette.accent),
             face: pick("face", &s.face, palette.face),
             danger: pick("danger", &s.danger, palette.danger),
-            edge: palette.edge,
+            edge: pick("edge", &s.edge, palette.edge),
         };
         let mut cw = CWidget {
             index,
@@ -427,6 +427,12 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                 cw.nums = vec![cx.num("min", &g.min), cx.num("max", &g.max)];
                 cw.zones = cx.zones(&palette, &g.zones);
                 cx.format("format", &g.format);
+                if g.ramp_segments == 1 || g.ramp_segments > 64 {
+                    cx.err("ramp_segments", "must be 0 or between 2 and 64");
+                }
+                if g.vertical && g.ramp_segments != 0 {
+                    cx.err("ramp_segments", "requires a horizontal bar");
+                }
             }
             WidgetKind::Readout(r) => {
                 cw.bindings.push(cx.binding("bind", &r.bind));
@@ -525,6 +531,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
                     cx.err("src", "image path is empty");
                 }
             }
+            WidgetKind::Panel => {}
         }
         widgets.push(cw);
     }

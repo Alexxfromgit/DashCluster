@@ -5,7 +5,7 @@ use cluster_core::{Snapshot, UnitPrefs};
 use cluster_layout::Compiled;
 use cluster_layout::compile::Rgba;
 use cluster_layout::eval::{Evaluator, WidgetFrame, WidgetStatic, WidgetType};
-use cluster_layout::model::{Align, ImageFit};
+use cluster_layout::model::{Align, DialIndicator, ImageFit};
 use slint::{Color, Model, ModelRc, SharedString, VecModel};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -32,6 +32,7 @@ fn kind(k: WidgetType) -> WType {
         WidgetType::LapTimer => WType::LapTimer,
         WidgetType::Label => WType::Label,
         WidgetType::Image => WType::Image,
+        WidgetType::Panel => WType::Panel,
     }
 }
 
@@ -222,6 +223,7 @@ impl DashboardView {
             minor: s.minor_ticks as i32,
             start_angle: s.start_angle,
             sweep: s.sweep,
+            arc_indicator: s.dial_indicator == DialIndicator::Arc,
             zones: ModelRc::new(VecModel::from(zones)),
             caption: s.caption.as_str().into(),
             label: s.label.as_str().into(),

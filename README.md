@@ -9,25 +9,48 @@ A customizable digital instrument cluster for racing games. Drive in **Forza Hor
 your speed, revs, gear, shift lights, tyres and lap times on a second screen, on your phone, and on
 other computers on your network, all at once. Design your own dashboards in the built-in editor.
 
-![Grand Tourer dashboard driven by live telemetry](docs/images/grand-tourer.png)
-
 Written in Rust with [Slint](https://slint.dev). The same dashboards render natively on Windows,
 macOS and Linux and, compiled to WebAssembly, in any phone or tablet browser.
+
+## Built-in dashboard gallery
+
+Screenshots use the demo car. Landscape dashboards are designed for 16:9 screens and Phone Portrait
+for tall phones. At other aspect ratios, the instruments scale together and the theme fills the space around them.
+
+### Grand Tourer
+
+![Grand Tourer with blue needle gauges and a full-width telemetry strip](docs/images/grand-tourer.png)
+
+| Race | Rally |
+|---|---|
+| ![Race with live tyre temperatures and pedal inputs](docs/images/race.png) | ![Rally with speed inside a cyan tachometer](docs/images/rally.png) |
+| **Endurance** | **Club Sport** |
+| ![Endurance with lap timing and a central gear indicator](docs/images/endurance.png) | ![Club Sport with a yellow tachometer on graphite](docs/images/club-sport.png) |
+| **Sprint** | **Apex** |
+| ![Sprint with a white rising RPM strip](docs/images/sprint.png) | ![Apex with bright yellow dual arcs on black](docs/images/apex.png) |
+
+### Heritage
+
+![Heritage with white dials and red needles](docs/images/heritage.png)
+
+### Phone Portrait
+
+<img src="docs/images/phone.png" width="300" alt="Phone Portrait with a large gear and speed display above lap times and pedal inputs">
+
+### Visual editor
+
+![Race dashboard open in the visual editor](docs/images/editor.png)
 
 ## What is in it
 
 | Area | Details |
 |---|---|
 | Games | Forza Horizon 4/5, Forza Motorsport (2023) and Forza Motorsport 7 via *Data Out* (UDP). Built so other sims and real cars (OBD-II) can be added as sources |
-| Dashboards | 12 widgets: analog and bar gauges, digital readouts, gear, shift lights, warning lamps, tyre temperatures, g-meter, pedal inputs, lap timer, text with live values, images. Four original sample designs |
+| Dashboards | Nine built-in layouts and 13 widget types, including analog dials, segmented RPM bars, gear indicators, lap timers and layered panels |
 | Editor | Visual editor (move, resize, snap, align, undo/redo, property inspector) or plain JSON5 files that reload when saved; `.cluster` packages to share dashboards with their images |
 | Screens | Desktop window (fullscreen, always on top), phone/tablet browser via QR code (no app to install), other computers mirror the first one automatically |
 | Units | Metric or imperial per quantity (speed, temperature, pressure, power, torque), also on phones; gauge scales re-round themselves |
 | Tools | Demo car, session recording and replay (`.ctlog`), a fake Forza sender for testing without the game, headless PNG rendering |
-
-| Race | Rally | Phone | Editor |
-|---|---|---|---|
-| ![Race](docs/images/race.png) | ![Rally](docs/images/rally.png) | ![Phone](docs/images/phone.png) | ![Editor](docs/images/editor.png) |
 
 ## Download
 
@@ -86,7 +109,10 @@ Ctrl/⌘+S save, G snap, Esc deselect.
 
 ## Your dashboards
 
-Saved in `%APPDATA%\DashCluster\dashboards` (Windows), `~/Library/Application Support/DashCluster/dashboards`
+Use **← / →** to cycle through the built-in dashboards, or select one at startup with `--dashboard sprint`.
+Press **D** to see it driven by the demo car and **E** to customize it in the visual editor.
+
+Your layouts are saved in `%APPDATA%\DashCluster\dashboards` (Windows), `~/Library/Application Support/DashCluster/dashboards`
 (macOS) or `~/.local/share/DashCluster/dashboards` (Linux), next to `settings.json`. Edit them in
 the app (**E**) or in any text editor; the app reloads a dashboard when its file is saved. The format
 is documented in [docs/dashboard-format.md](docs/dashboard-format.md).

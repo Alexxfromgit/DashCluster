@@ -1,4 +1,4 @@
-import { WType, WZone, WStatic, WFrame, AnalogGaugeW, BarGaugeW, ReadoutW, GearW, ShiftLightsW, LampW, TyreQuadW, GMeterW, PedalsW, LapTimerW, LabelW, ImageW } from "widgets.slint";
+import { WType, WZone, WStatic, WFrame, AnalogGaugeW, BarGaugeW, ReadoutW, GearW, ShiftLightsW, LampW, TyreQuadW, GMeterW, PedalsW, LapTimerW, LabelW, ImageW, PanelW } from "widgets.slint";
 export { WType, WZone, WStatic, WFrame }
 
 // Renders a dashboard: widgets placed in canvas units, scaled to fit and centered.
@@ -11,15 +11,17 @@ export component Dashboard inherits Rectangle {
     in property <color> bg2: #05070a;
     in property <float> bg-angle: 180;
     in property <image> bg-image;
+    in property <bool> extend-background;
     // Dims everything when the data feed is stale.
     in property <bool> stale;
 
-    // Logical pixels per canvas unit, and the letterbox offset.
+    // Logical pixels per canvas unit and the offset of the fitted canvas.
     out property <length> unit: min(self.width / self.canvas-w, self.height / self.canvas-h);
     out property <length> ox: (self.width - self.canvas-w * self.unit) / 2;
     out property <length> oy: (self.height - self.canvas-h * self.unit) / 2;
 
-    background: #000;
+    property <brush> backdrop: @linear-gradient(root.bg-angle * 1deg, root.bg 0%, root.bg2 100%);
+    background: root.extend-background ? root.backdrop : #000;
     clip: true;
 
     Rectangle {
@@ -27,7 +29,7 @@ export component Dashboard inherits Rectangle {
         y: root.oy;
         width: root.canvas-w * root.unit;
         height: root.canvas-h * root.unit;
-        background: @linear-gradient(root.bg-angle * 1deg, root.bg 0%, root.bg2 100%);
+        background: root.extend-background ? transparent : root.backdrop;
         Image {
             width: 100%;
             height: 100%;
@@ -58,6 +60,7 @@ export component Dashboard inherits Rectangle {
             if st.kind == WType.lap-timer: LapTimerW { st: st; fr: root.frames[i]; }
             if st.kind == WType.label: LabelW { st: st; fr: root.frames[i]; }
             if st.kind == WType.image: ImageW { st: st; fr: root.frames[i]; }
+            if st.kind == WType.panel: PanelW { st: st; fr: root.frames[i]; }
         }
     }
 }

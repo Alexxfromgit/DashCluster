@@ -6,7 +6,7 @@
 //! - [`WidgetFrame`]: up to four value/text/color slots plus an on/off flag. Every frame.
 
 use crate::compile::{CBinding, CNum, CWidget, Compiled, Rgba, WidgetColors};
-use crate::model::{Align, Format, FormatStyle, ImageFit, WidgetKind};
+use crate::model::{Align, DialIndicator, Format, FormatStyle, ImageFit, WidgetKind};
 use cluster_core::units::{STANDARD_GRAVITY, format_gear, format_lap_time};
 use cluster_core::{Quantity, SignalId, Snapshot, UnitPrefs};
 
@@ -24,6 +24,7 @@ pub enum WidgetType {
     LapTimer,
     Label,
     Image,
+    Panel,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,6 +44,7 @@ pub struct WidgetStatic {
     pub minor_ticks: u32,
     pub start_angle: f32,
     pub sweep: f32,
+    pub dial_indicator: DialIndicator,
     /// (from, to, color) in shown units.
     pub zones: Vec<(f32, f32, Rgba)>,
     pub caption: String,
@@ -51,7 +53,7 @@ pub struct WidgetStatic {
     pub align: Align,
     pub vertical: bool,
     pub show_value: bool,
-    /// Shift-light segment colors, or pedal bar colors.
+    /// Shift-light segments, ramp bar segments, or pedal bar colors.
     pub segment_colors: Vec<Rgba>,
     /// Shift-light flash color, lamp color, or label color.
     pub color: Rgba,
@@ -334,6 +336,7 @@ impl Evaluator {
                     minor_ticks: 0,
                     start_angle: 0.0,
                     sweep: 0.0,
+                    dial_indicator: DialIndicator::Needle,
                     zones: self.r.zones(cw, snap),
                     caption: String::new(),
                     label: String::new(),
@@ -365,7 +368,13 @@ impl Evaluator {
                         s.minor_ticks = g.minor_ticks.clamp(1, 20);
                         s.start_angle = g.start_angle;
                         s.sweep = g.sweep.clamp(1.0, 360.0);
+                        s.dial_indicator = g.indicator;
                         s.caption = g.caption.clone();
+                        if let (Some(center), Some(binding)) = (&g.center, cw.bindings.get(1))
+                            && center.show_unit
+                        {
+                            s.unit = self.r.unit_label(binding, &center.format);
+                        }
                         // Re-round a fixed range that was converted to other units.
                         if let (Some(b), [CNum::Fixed(_), CNum::Fixed(_)]) = (rel, cw.nums.as_slice())
                             && b.convert
@@ -391,6 +400,13 @@ impl Evaluator {
                         s.label = g.label.clone();
                         s.show_value = g.show_value;
                         s.unit = rel.map(|b| self.r.unit_label(b, &g.format)).unwrap_or_default();
+                        s.segment_colors = (0..g.ramp_segments)
+                            .map(|i| {
+                                let fraction = (i as f32 + 0.5) / g.ramp_segments as f32;
+                                let value = s.min + (s.max - s.min) * fraction;
+                                zone_color(&s.zones, value, s.colors.accent)
+                            })
+                            .collect();
                     }
                     WidgetKind::Readout(r) => {
                         s.kind = WidgetType::Readout;
@@ -413,7 +429,9 @@ impl Evaluator {
                     WidgetKind::TyreQuad(t) => {
                         s.kind = WidgetType::TyreQuad;
                         s.label = t.label.clone();
-                        s.unit = rel.map(|b| self.r.unit_label(b, &t.format)).unwrap_or_default();
+                        if t.show_unit {
+                            s.unit = rel.map(|b| self.r.unit_label(b, &t.format)).unwrap_or_default();
+                        }
                     }
                     WidgetKind::GMeter(g) => {
                         s.kind = WidgetType::GMeter;
@@ -441,6 +459,7 @@ impl Evaluator {
                         s.image = i.src.clone();
                         s.image_fit = i.fit;
                     }
+                    WidgetKind::Panel => s.kind = WidgetType::Panel,
                 }
                 s
             })
@@ -564,7 +583,7 @@ impl Evaluator {
                     f.slots[0].text = self.render_template(&cw.template, snap);
                     f.slots[0].color = cw.extra_colors[0];
                 }
-                WidgetKind::Image(_) => f.valid = true,
+                WidgetKind::Image(_) | WidgetKind::Panel => f.valid = true,
             }
             out.push(f);
         }
@@ -689,6 +708,23 @@ mod tests {
         // 110 °C → 230 °F
         assert!((st[2].zones[0].0 - 230.0).abs() < 0.1);
         assert_eq!(st[0].max, 8.0, "rpm doesn't change with units");
+    }
+
+    #[test]
+    fn ramp_colors_follow_the_resolved_range() {
+        let src = r#"{ name: "Ramp", canvas: { width: 400, height: 100 }, widgets: [
+            { type: "bar_gauge", x: 0, y: 0, w: 400, h: 100, bind: "rpm", ramp_segments: 4,
+              max: { signal: "rpm_max", fallback: 8000 }, zones: [{ from: 4000, color: "danger" }] }
+        ] }"#;
+        let e = Evaluator::new(Compiled::from_json5(src).unwrap(), UnitPrefs::default());
+        let palette = &e.compiled().palette;
+        let st = e.statics(&Snapshot::new());
+        assert_eq!(st[0].segment_colors, [palette.accent, palette.accent, palette.danger, palette.danger]);
+
+        let mut s = Snapshot::new();
+        s.set(SignalId::RpmMax, 5000.0);
+        let st = e.statics(&s);
+        assert_eq!(st[0].segment_colors, [palette.accent, palette.accent, palette.accent, palette.danger]);
     }
 
     #[test]

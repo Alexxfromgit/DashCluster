@@ -2,7 +2,7 @@
 // per-frame values (`fr`) from Rust; sizes are relative to the widget's own box so
 // everything scales with the dashboard.
 
-export enum WType { analog-gauge, bar-gauge, readout, gear, shift-lights, lamp, tyre-quad, g-meter, pedals, lap-timer, label, image }
+export enum WType { analog-gauge, bar-gauge, readout, gear, shift-lights, lamp, tyre-quad, g-meter, pedals, lap-timer, label, image, panel }
 
 export struct WZone { from: float, to: float, color: color }
 
@@ -14,6 +14,7 @@ export struct WStatic {
     min: float, max: float,
     major: int, minor: int,
     start-angle: float, sweep: float,
+    arc-indicator: bool,
     zones: [WZone],
     caption: string, label: string, unit: string,
     // 0 = left, 1 = center, 2 = right
@@ -46,6 +47,21 @@ component Base inherits Rectangle {
 }
 
 // ---------------------------------------------------------------- analog gauge
+component DialArc inherits Path {
+    in property <angle> start;
+    in property <angle> sweep;
+    property <angle> middle: self.start + self.sweep / 2;
+    property <angle> end: self.start + self.sweep;
+    in property <float> radius: 87;
+    viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
+    visible: self.sweep > 0deg;
+    commands: "M " + (100 + self.radius * sin(self.start)) + " " + (100 - self.radius * cos(self.start))
+        + " A " + self.radius + " " + self.radius + " 0 0 1 "
+        + (100 + self.radius * sin(self.middle)) + " " + (100 - self.radius * cos(self.middle))
+        + " A " + self.radius + " " + self.radius + " 0 0 1 "
+        + (100 + self.radius * sin(self.end)) + " " + (100 - self.radius * cos(self.end));
+}
+
 export component AnalogGaugeW inherits Base {
     property <length> side: min(self.width, self.height);
     property <float> span: max(0.0001, root.st.max - root.st.min);
@@ -62,21 +78,29 @@ export component AnalogGaugeW inherits Base {
         border-width: root.st.face.alpha > 0 ? root.side * 0.012 : 0;
         border-color: root.st.edge;
 
-        for z in root.st.zones: Path {
+        if root.st.arc-indicator: DialArc {
+            width: 100%; height: 100%;
+            start: root.a0; sweep: root.sw;
+            stroke: root.st.edge;
+            stroke-width: root.side * 0.045;
+        }
+        if root.st.arc-indicator: DialArc {
+            width: 100%; height: 100%;
+            start: root.a0; sweep: root.sw * clamp(root.frac, 0, 1);
+            stroke: root.fr.c0;
+            stroke-width: root.side * 0.045;
+        }
+
+        for z in root.st.zones: DialArc {
             width: 100%;
             height: 100%;
-            viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
             property <float> f0: clamp((z.from - root.st.min) / root.span, 0, 1);
             property <float> f1: clamp((z.to - root.st.min) / root.span, 0, 1);
-            property <angle> b0: root.a0 + root.sw * self.f0;
-            property <angle> b1: root.a0 + root.sw * self.f1;
-            property <float> r: 87;
-            visible: self.f1 > self.f0;
+            start: root.a0 + root.sw * self.f0;
+            sweep: root.sw * (self.f1 - self.f0);
+            radius: root.st.arc-indicator ? 95 : 87;
             stroke: z.color;
-            stroke-width: root.side * 0.03;
-            commands: "M " + (100 + self.r * sin(self.b0)) + " " + (100 - self.r * cos(self.b0))
-                + " A " + self.r + " " + self.r + " 0 " + ((self.b1 - self.b0) > 180deg ? 1 : 0) + " 1 "
-                + (100 + self.r * sin(self.b1)) + " " + (100 - self.r * cos(self.b1));
+            stroke-width: root.side * (root.st.arc-indicator ? 0.012 : 0.03);
         }
 
         for i in root.nticks + 1: Path {
@@ -85,11 +109,12 @@ export component AnalogGaugeW inherits Base {
             viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
             property <bool> major: mod(i, root.st.minor) == 0;
             property <angle> a: root.a0 + root.sw * i / max(1, root.nticks);
-            property <float> r0: self.major ? 76 : 81;
-            stroke: root.st.ink;
+            property <float> r0: root.st.arc-indicator ? (self.major ? 73 : 77) : (self.major ? 76 : 81);
+            property <float> r1: root.st.arc-indicator ? 81 : 90;
+            stroke: self.major ? root.st.ink : root.st.ink.transparentize(35%);
             stroke-width: self.major ? root.side * 0.011 : root.side * 0.005;
             commands: "M " + (100 + self.r0 * sin(self.a)) + " " + (100 - self.r0 * cos(self.a))
-                + " L " + (100 + 90 * sin(self.a)) + " " + (100 - 90 * cos(self.a));
+                + " L " + (100 + self.r1 * sin(self.a)) + " " + (100 - self.r1 * cos(self.a));
         }
 
         for i in root.st.major + 1: Text {
@@ -104,23 +129,32 @@ export component AnalogGaugeW inherits Base {
         }
 
         Text {
-            y: parent.height * 0.6;
+            y: root.st.arc-indicator ? parent.height * 0.47 - self.height / 2
+                : parent.height * (root.st.unit == "" ? 0.6 : 0.55);
             x: (parent.width - self.width) / 2;
             text: root.fr.t0;
             color: root.fr.c1;
-            font-size: root.side * 0.13 * root.st.font-scale;
+            font-size: root.side * (root.st.arc-indicator ? 0.22 : 0.13) * root.st.font-scale;
             font-weight: 700;
         }
 
+        if root.st.unit != "": Text {
+            y: parent.height * (root.st.arc-indicator ? 0.56 : 0.69);
+            x: (parent.width - self.width) / 2;
+            text: root.st.unit;
+            color: root.st.ink;
+            font-size: root.side * 0.046 * root.st.font-scale;
+        }
+
         Text {
-            y: parent.height * 0.765;
+            y: parent.height * (root.st.arc-indicator ? 0.64 : 0.765);
             x: (parent.width - self.width) / 2;
             text: root.st.caption;
             color: root.st.muted;
             font-size: root.side * 0.055 * root.st.font-scale;
         }
 
-        Path {
+        if !root.st.arc-indicator: Path {
             width: 100%;
             height: 100%;
             viewbox-x: 0; viewbox-y: 0; viewbox-width: 200; viewbox-height: 200;
@@ -132,7 +166,7 @@ export component AnalogGaugeW inherits Base {
                 + " L " + (100 - 3.5 * cos(self.a)) + " " + (100 - 3.5 * sin(self.a)) + " Z";
         }
 
-        Rectangle {
+        if !root.st.arc-indicator: Rectangle {
             width: root.side * 0.085;
             height: self.width;
             border-radius: self.width / 2;
@@ -149,7 +183,7 @@ export component BarGaugeW inherits Base {
     property <length> pad: self.thick * 0.12;
     property <float> f: clamp(root.fr.v0, 0, 1);
 
-    track := Rectangle {
+    if root.st.segments.length == 0: Rectangle {
         border-radius: root.thick * 0.18;
         background: root.st.face;
         border-width: 1px;
@@ -174,6 +208,25 @@ export component BarGaugeW inherits Base {
             height: root.st.vertical ? 2px : parent.height;
             background: z.color;
             opacity: 0.8;
+        }
+    }
+
+    for c[i] in root.st.segments: Rectangle {
+        property <length> cell: root.width / max(1, root.st.segments.length);
+        property <float> rise: min(1, i * 3 / max(1, root.st.segments.length - 1));
+        property <float> filled: clamp(root.f * root.st.segments.length - i, 0, 1);
+        x: i * self.cell;
+        y: root.height - self.height;
+        width: self.cell * 0.85;
+        height: root.height * (0.24 + 0.76 * self.rise * (2 - self.rise));
+        background: @linear-gradient(180deg, c.transparentize(85%) 0%, root.st.face 100%);
+        border-width: 1px;
+        border-color: root.st.edge;
+        Rectangle {
+            x: 0;
+            width: parent.width * parent.filled;
+            height: parent.height;
+            background: c;
         }
     }
 
@@ -340,17 +393,19 @@ component Tyre inherits Rectangle {
 }
 
 export component TyreQuadW inherits Base {
-    property <length> label-h: root.st.label != "" ? root.height * 0.12 : 0;
+    property <string> title: root.st.unit == "" ? root.st.label
+        : root.st.label == "" ? root.st.unit : root.st.label + " · " + root.st.unit;
+    property <length> label-h: self.title != "" ? root.height * 0.12 : 0;
     property <length> gap: root.width * 0.06;
     property <length> tw: (root.width - self.gap) / 2;
     property <length> th: (root.height - self.label-h - self.gap) / 2;
-    if root.st.label != "": Text {
+    if root.title != "": Text {
         x: 0;
         y: 0;
         width: root.width;
         height: root.label-h;
         horizontal-alignment: center;
-        text: root.st.label;
+        text: root.title;
         color: root.st.muted;
         font-size: root.label-h * 0.75;
         font-weight: 700;
@@ -491,4 +546,12 @@ export component ImageW inherits Base {
         source: root.st.image;
         image-fit: root.st.fit == 1 ? ImageFit.cover : root.st.fit == 2 ? ImageFit.fill : ImageFit.contain;
     }
+}
+
+export component PanelW inherits Base {
+    property <length> side: min(self.width, self.height);
+    background: root.st.face;
+    border-color: root.st.edge;
+    border-width: clamp(root.side * 0.005, 1px, 2px);
+    border-radius: min(root.side * 0.065, root.width * 0.025);
 }

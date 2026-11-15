@@ -65,6 +65,7 @@ pub const WIDGET_TYPES: &[(&str, &str)] = &[
     ("lap_timer", "Lap timer"),
     ("label", "Label / text"),
     ("image", "Image"),
+    ("panel", "Panel"),
 ];
 
 const ALIGN: &[&str] = &["left", "center", "right"];
@@ -89,6 +90,7 @@ fn style() -> Vec<(&'static str, &'static str, PropKind)> {
         p("style.ink", "Text color", PropKind::Color),
         p("style.accent", "Accent color", PropKind::Color),
         p("style.face", "Face color", PropKind::Color),
+        p("style.edge", "Border color", PropKind::Color),
         p("style.muted", "Muted color", PropKind::Color),
         p("style.font_scale", "Text size ×", PropKind::Number),
     ]
@@ -121,6 +123,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("minor_ticks", "Minor per major", PropKind::Number),
                 p("start_angle", "Start angle °", PropKind::Number),
                 p("sweep", "Sweep °", PropKind::Number),
+                p("indicator", "Indicator", PropKind::Choice(&["needle", "arc"])),
                 p("caption", "Caption", PropKind::Text),
                 p("center", "Center text (JSON)", PropKind::Json),
                 p("zones", "Zones (JSON)", PropKind::Json),
@@ -134,6 +137,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
                 p("min", "Min", PropKind::Json),
                 p("max", "Max", PropKind::Json),
                 p("vertical", "Vertical", PropKind::Bool),
+                p("ramp_segments", "Ramp segments (0 = off)", PropKind::Number),
                 p("show_value", "Show value", PropKind::Bool),
                 p("format.decimals", "Decimals", PropKind::Number),
                 p("format.unit", "Unit label", PropKind::Text),
@@ -184,6 +188,7 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
         "tyre_quad" => rows.extend([
             p("", "Tyres", PropKind::Header),
             p("label", "Label", PropKind::Text),
+            p("show_unit", "Show unit", PropKind::Bool),
             p("format.decimals", "Decimals", PropKind::Number),
             p("signals", "Signals (JSON)", PropKind::Json),
             p("zones", "Zones (JSON)", PropKind::Json),
@@ -213,7 +218,13 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
         ]),
         _ => {}
     }
-    if kind != "image" {
+    if kind == "panel" {
+        rows.extend([
+            p("", "Style", PropKind::Header),
+            p("style.face", "Fill color", PropKind::Color),
+            p("style.edge", "Border color", PropKind::Color),
+        ]);
+    } else if kind != "image" {
         rows.extend(style());
     }
     // Defaults are what the *file format* assumes when a key is missing (so setting a value
@@ -223,16 +234,17 @@ pub fn widget_schema(kind: &str) -> Vec<PropSpec> {
     for s in &mut out {
         if s.default.is_null() {
             s.default = match s.key {
-                "z" => json!(0),
+                "z" | "ramp_segments" => json!(0),
                 "bind.scale" | "style.font_scale" => json!(1),
                 "bind.offset" | "bind.smoothing" => json!(0),
                 "major_ticks" => json!(8),
                 "minor_ticks" => json!(4),
                 "start_angle" => json!(-135),
                 "sweep" => json!(270),
+                "indicator" => json!("needle"),
                 "min" => json!(0),
                 "show_value" | "show_labels" | "show_last" | "show_best" => json!(true),
-                "vertical" | "blink" => json!(false),
+                "vertical" | "blink" | "show_unit" => json!(false),
                 "format.decimals" => json!(0),
                 "format.style" => json!("number"),
                 "align" => json!("center"),
@@ -300,13 +312,14 @@ pub fn default_widget(kind: &str) -> Value {
         "lamp" => {
             json!({ "type": kind, "w": 90, "h": 50, "bind": "handbrake", "above": 10, "icon": "HB", "color": "danger" })
         }
-        "tyre_quad" => json!({ "type": kind, "w": 240, "h": 240, "label": "TYRE °C",
+        "tyre_quad" => json!({ "type": kind, "w": 240, "h": 240, "label": "TYRE TEMP", "show_unit": true,
             "zones": [ { "to": 65, "color": "info" }, { "from": 65, "to": 100, "color": "ok" }, { "from": 100, "color": "danger" } ] }),
         "g_meter" => json!({ "type": kind, "w": 240, "h": 240, "max_g": 2 }),
         "pedals" => json!({ "type": kind, "w": 180, "h": 260 }),
         "lap_timer" => json!({ "type": kind, "w": 320, "h": 260 }),
         "label" => json!({ "type": kind, "w": 300, "h": 50, "text": "LAP {lap_number}" }),
         "image" => json!({ "type": kind, "w": 200, "h": 200, "src": "image.png" }),
+        "panel" => json!({ "type": kind, "w": 300, "h": 180, "z": -1 }),
         _ => json!({ "type": "label", "w": 300, "h": 50, "text": kind }),
     }
 }

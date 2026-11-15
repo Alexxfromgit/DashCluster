@@ -35,23 +35,29 @@ Anywhere a number is expected (`min`, `max`, zone `from`/`to`, `start`, `limit`,
 
 | type | Key fields |
 |---|---|
-| `analog_gauge` | `bind`, `min`, `max`, `zones`, `major_ticks`, `minor_ticks`, `start_angle`, `sweep`, `caption`, `center: { bind, format }` |
-| `bar_gauge` | `bind`, `min`, `max`, `zones`, `vertical`, `label`, `show_value`, `format` |
+| `analog_gauge` | `bind`, `min`, `max`, `zones`, `major_ticks`, `minor_ticks`, `start_angle`, `sweep`, `caption`, `indicator: needle/arc`, `center: { bind, format, show_unit }` |
+| `bar_gauge` | `bind`, `min`, `max`, `zones`, `vertical`, `label`, `show_value`, `format`, `ramp_segments` |
 | `readout` | `bind`, `format: { style: number/time/gear/on_off, decimals (0–6), unit }`, `label`, `zones`, `align` |
 | `gear` | `bind` (default gear), `shift_at` |
 | `shift_lights` | `bind` (default rpm), `start`, `limit`, `segments`, `colors`, `flash_color` |
 | `lamp` | `bind`, `icon`, `color`, `above` (default 0.5) or `below`, `blink` |
-| `tyre_quad` | `signals` (FL, FR, RL, RR), `zones`, `format`, `label` |
+| `tyre_quad` | `signals` (FL, FR, RL, RR), `zones`, `format`, `label`, `show_unit` |
 | `g_meter` | `max_g` |
 | `pedals` | `signals` (1–4), `colors`, `show_labels` |
 | `lap_timer` | `show_last`, `show_best` |
 | `label` | `text` with `{signal}`, `{signal:1}` (0–6 decimals), `{signal:time}`, `{signal:gear}`, `{signal:on_off}` placeholders, `align`, `color` |
 | `image` | `src` (relative to the dashboard file), `fit: contain/cover/fill`. Shown on the computer; phones don't show images yet |
+| `panel` | Rounded background with fill and border from `style.face` and `style.edge`. Use `z: -1` to put it behind instruments |
+
+Analog gauges default to a needle. Set `indicator: "arc"` for an illuminated sweep and a larger center value.
+Set `center.show_unit` to `true` to display the center binding's unit, which follows the active unit settings.
+A horizontal bar can use `ramp_segments` from 2 to 64 for a rising segmented strip that follows its `zones`.
+The default of `0` draws a continuous bar.
 
 Files are limited to 1 MB and 64 levels of nesting (real dashboards are a few KB).
 
 Every widget also takes `id`, `x`, `y`, `w`, `h`, `z` (layer) and
-`style: { ink, accent, face, muted, danger, font_scale }`. Colors are `#rrggbb[aa]` or a
+`style: { ink, accent, face, edge, muted, danger, font_scale }`. Colors are `#rrggbb[aa]` or a
 theme name.
 
 ## Signals

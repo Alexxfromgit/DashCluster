@@ -24,8 +24,8 @@ use std::time::{Duration, Instant};
 #[derive(Parser)]
 #[command(name = "dashcluster", version, about = "Digital instrument cluster")]
 struct Cli {
-    /// Dashboard to show first: a built-in name (grand-tourer, race, rally,
-    /// phone-portrait) or the name/path of one of the --dashboards files.
+    /// Dashboard to show first: a built-in name (such as grand-tourer or sprint)
+    /// or the name/path of one of the --dashboards files.
     #[arg(long, short = 'd', global = true)]
     dashboard: Option<String>,
     /// Extra dashboard files or folders to load (hot-reloaded on save).
@@ -118,7 +118,7 @@ enum Command {
         /// Image height (default: follows the dashboard's aspect ratio).
         #[arg(long)]
         height: Option<u32>,
-        /// Also show an overlay: settings, guide or qr.
+        /// Also show the status bar, settings, guide or QR code (status, settings, guide or qr).
         #[arg(long)]
         overlay: Option<String>,
     },
@@ -250,6 +250,12 @@ fn snapshot(
     bind_view(&ui, &mut view);
     ui.set_show_status(false);
     match overlay {
+        Some("status") => {
+            ui.set_show_status(true);
+            ui.set_status_text(
+                format!("{} · Demo car · ←/→ dashboards · E edit · P settings · F fullscreen", view.name()).into(),
+            );
+        }
         Some("settings") => {
             let s = settings::Settings { units: cluster_core::UnitPrefs::imperial(), ..Default::default() };
             ui.set_ui_settings(cluster_ui::UiSettings {

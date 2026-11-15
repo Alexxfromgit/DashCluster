@@ -6,8 +6,8 @@ export { WType, WZone, WStatic, WFrame, PropRow, PaletteItem, UiSettings }
 
 export component MainWindow inherits Window {
     title: "DashCluster — " + root.dashboard-name;
-    preferred-width: 1280px;
-    preferred-height: 540px;
+    preferred-width: 1200px;
+    preferred-height: 675px + (root.show-status && !root.edit-mode ? 24px : 0px);
     min-width: 320px;
     min-height: 200px;
     background: #000;
@@ -162,7 +162,7 @@ export component MainWindow inherits Window {
                 }
                 Rectangle {
                     horizontal-stretch: 1;
-                    dash := Dashboard { }
+                    dash := Dashboard { extend-background: !root.edit-mode; }
                     if root.edit-mode: EditOverlay {
                         statics: dash.statics;
                         selected: root.selected;
@@ -202,6 +202,20 @@ export component MainWindow inherits Window {
                     delete => { fs.focus(); root.delete-selected(); }
                     restack(d) => { fs.focus(); root.restack(d); }
                     align(how) => { fs.focus(); root.align(how); }
+                }
+            }
+            if root.show-status && !root.edit-mode: Rectangle {
+                height: 24px;
+                background: #0b1018;
+                Text {
+                    x: 10px;
+                    width: parent.width - 20px;
+                    height: parent.height;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    text: root.status-text;
+                    color: #a1adbb;
+                    font-size: 11px;
                 }
             }
         }
@@ -282,14 +296,6 @@ export component MainWindow inherits Window {
                 Text { text: root.qr-detail; color: #9aa4b2; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
             }
         }
-    }
-
-    if root.show-status && !root.edit-mode: Text {
-        x: 10px;
-        y: root.height - self.height - 6px;
-        text: root.status-text;
-        color: #6e7681;
-        font-size: 11px;
     }
 
     if root.show-settings: SettingsPanel {
