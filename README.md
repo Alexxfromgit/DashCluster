@@ -108,7 +108,9 @@ stay dimmed with Forza. The sample dashboards use what Forza provides.
    Set `enabled="true"`, `port="20777"`, `delay="1"`, and `ip="127.0.0.1"` for the same PC.
    For a separate DashCluster computer, use its LAN address. If you chose a different port, set it in both places.
 3. Restart the game and enter a race or stage. Speed, RPM, gear and pedals use the common packet layout.
-   Lap, fuel and RPM limit availability depends on the game and packet size.
+   Lap, fuel and RPM limit availability depends on the game and packet size. GRID 2's compact layout
+   supplies distance on the opening lap. Cumulative distance on later laps requires the track length
+   from an extended packet.
 
 From a terminal, use `cargo run -p cluster-desktop -- --source dirt-grid`. The guide uses the
 [DiRT](https://horizonlabshud.com/games/dirt/) and [GRID](https://horizonlabshud.com/games/grid/)
