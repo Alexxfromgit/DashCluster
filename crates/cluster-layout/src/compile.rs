@@ -51,6 +51,8 @@ pub struct Palette {
     pub info: Rgba,
     pub face: Rgba,
     pub edge: Rgba,
+    /// Unit-label color; the theme's `unit`, or `muted` when unset.
+    pub unit: Rgba,
 }
 
 impl Palette {
@@ -65,6 +67,7 @@ impl Palette {
             "info" => self.info,
             "face" => self.face,
             "edge" => self.edge,
+            "unit" => self.unit,
             "transparent" => Rgba::default(),
             _ => return None,
         })
@@ -77,7 +80,7 @@ impl Palette {
 }
 
 pub const THEME_COLOR_NAMES: &[&str] =
-    &["ink", "muted", "accent", "danger", "warn", "ok", "info", "face", "edge", "transparent"];
+    &["ink", "muted", "accent", "danger", "warn", "ok", "info", "face", "edge", "unit", "transparent"];
 
 /// A problem found while compiling a layout.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -346,6 +349,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         info: Rgba::rgb(47, 129, 247),
         face: Rgba::rgb(13, 17, 23),
         edge: Rgba::rgb(48, 54, 61),
+        unit: Rgba::rgb(125, 133, 144),
     };
     let mut hex = |field: &str, spec: &str, dflt: Rgba| {
         Rgba::parse_hex(spec).unwrap_or_else(|| {
@@ -353,7 +357,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             dflt
         })
     };
-    let palette = Palette {
+    let mut palette = Palette {
         ink: hex("ink", &t.ink, base.ink),
         muted: hex("muted", &t.muted, base.muted),
         accent: hex("accent", &t.accent, base.accent),
@@ -363,8 +367,12 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
         info: hex("info", &t.info, base.info),
         face: hex("face", &t.face, base.face),
         edge: hex("edge", &t.edge, base.edge),
+        unit: base.unit,
     };
-    let theme_unit = match t.unit.as_deref() {
+    // `theme.unit` may name another theme color; while it is resolved,
+    // `unit` means `muted`, its default.
+    palette.unit = palette.muted;
+    palette.unit = match t.unit.as_deref() {
         Some(spec) => cx.color(&palette, "theme.unit", spec),
         None => palette.muted,
     };
@@ -396,7 +404,7 @@ pub fn compile(layout: Layout) -> Result<Compiled, LayoutError> {
             face: pick("face", &s.face, palette.face),
             danger: pick("danger", &s.danger, palette.danger),
             edge: pick("edge", &s.edge, palette.edge),
-            unit: pick("unit", &s.unit, theme_unit),
+            unit: pick("unit", &s.unit, palette.unit),
         };
         let mut cw = CWidget {
             index,

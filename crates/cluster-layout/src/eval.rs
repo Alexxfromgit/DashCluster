@@ -848,6 +848,23 @@ mod tests {
     }
 
     #[test]
+    fn unit_is_a_theme_color_name() {
+        let src = r##"{ name: "Units", canvas: { width: 400, height: 400 },
+            theme: { unit: "info" },
+            widgets: [
+            { type: "readout", x: 0, y: 0, w: 100, h: 50, bind: "speed", style: { ink: "unit" } },
+        ] }"##;
+        let e = Evaluator::new(Compiled::from_json5(src).unwrap(), UnitPrefs::default());
+        let palette = e.compiled().palette;
+        assert_eq!(palette.unit, palette.info);
+        assert_eq!(e.statics(&Snapshot::new())[0].colors.ink, palette.info);
+
+        let own = r##"{ name: "Units", canvas: { width: 400, height: 400 }, theme: { unit: "unit" }, widgets: [] }"##;
+        let c = Compiled::from_json5(own).unwrap();
+        assert_eq!(c.palette.unit, c.palette.muted, "a self-reference falls back to muted");
+    }
+
+    #[test]
     fn missing_signals_are_invalid_not_zero() {
         let c = Compiled::from_json5(SAMPLE).unwrap();
         let mut e = Evaluator::new(c, UnitPrefs::default());

@@ -255,6 +255,12 @@ export component BarGaugeW inherits Base {
     property <float> zf: clamp((0 - root.st.min) / self.span, 0, 1);
     property <bool> is-center: root.st.variant == 1;
     property <bool> is-curve: root.st.variant == 2;
+    // Value chip of horizontal bars: its natural sizes, and the room inside its margins
+    // and padding; the value and unit shrink together when they would overflow.
+    property <length> chip-value-size: root.height * 0.5 * root.value-scale;
+    property <length> chip-unit-size: root.height * 0.34 * root.st.font-scale;
+    property <length> chip-gap: root.st.unit == "" ? 0px : root.height * 0.08;
+    property <length> chip-room: max(0px, root.width - root.pad * 3);
 
     // ---- continuous bar (plain or center-zero)
     if root.st.segments.length == 0 && !root.is-curve: Rectangle {
@@ -424,24 +430,41 @@ export component BarGaugeW inherits Base {
             size: root.height * 0.46 * root.st.font-scale;
         }
     }
-    if !root.st.vertical && !root.is-curve && root.st.show-value: Rectangle {
+    if !root.st.vertical && !root.is-curve && root.st.show-value: chip := Rectangle {
         x: root.width - self.width - root.pad * 0.6;
         y: root.height * 0.14;
-        width: value-row.preferred-width + root.pad * 1.8;
+        // Measured at natural size (never drawn) to find the shrink factor.
+        property <length> natural-w: value-probe.preferred-width + unit-probe.preferred-width + root.chip-gap;
+        property <float> k: self.natural-w > root.chip-room ? root.chip-room / max(1px, self.natural-w) : 1;
+        width: min(value-row.preferred-width + root.pad * 1.8, max(0px, root.width - root.pad * 1.2));
         height: root.height * 0.72;
         border-radius: root.height * 0.12;
         background: root.st.face.transparentize(25%);
+        clip: true;
+        value-probe := Text {
+            visible: false;
+            text: root.fr.t0;
+            font-family: root.value-font;
+            font-size: root.chip-value-size;
+            font-weight: 700;
+        }
+        unit-probe := Text {
+            visible: false;
+            text: root.st.unit;
+            font-family: DashFonts.sans;
+            font-size: root.chip-unit-size;
+            font-weight: 600;
+        }
         value-row := HorizontalLayout {
             x: root.pad * 0.9;
-            width: self.preferred-width;
             height: parent.height;
-            spacing: root.height * 0.08;
+            spacing: root.chip-gap * chip.k;
             Text {
                 vertical-alignment: center;
                 text: root.fr.t0;
                 color: root.st.ink;
                 font-family: root.value-font;
-                font-size: root.height * 0.5 * root.value-scale;
+                font-size: root.chip-value-size * chip.k;
                 font-weight: 700;
             }
             if root.st.unit != "": Text {
@@ -449,7 +472,7 @@ export component BarGaugeW inherits Base {
                 text: root.st.unit;
                 color: root.st.unit-color;
                 font-family: DashFonts.sans;
-                font-size: root.height * 0.34 * root.st.font-scale;
+                font-size: root.chip-unit-size * chip.k;
                 font-weight: 600;
             }
         }
@@ -888,6 +911,10 @@ export component LapTimerW inherits Base {
     // Largest size at which "0:00.000" fits the given width.
     property <length> fit-full: root.width * 0.96 / (8 * root.glyph-w);
     property <length> fit-half: root.width * 0.46 / (8 * root.glyph-w);
+    // Under the current lap, LAST and BEST share the row, or one takes all of it.
+    property <bool> both: root.st.show-last && root.st.show-best;
+    property <length> col-w: self.both ? root.width / 2 : root.width;
+    property <length> fit-col: self.both ? self.fit-half : self.fit-full;
 
     if !root.columns: VerticalLayout {
         alignment: start;
@@ -916,14 +943,14 @@ export component LapTimerW inherits Base {
         }
         Rectangle { x: 0; y: root.u * 5.8; width: root.width; height: 1px; background: root.st.edge; }
         if root.st.show-last: Rectangle {
-            x: 0; y: root.u * 6.1; width: root.width / 2; height: root.u * 3.9;
+            x: 0; y: root.u * 6.1; width: root.col-w; height: root.u * 3.9;
             Caption { x: 0; y: 0; height: root.u * 1.2; vertical-alignment: center; text: "LAST"; color: root.st.muted; size: root.u * 0.9 * root.st.font-scale; }
-            Text { x: 0; y: root.u * 1.2; height: root.u * 2.6; vertical-alignment: center; text: root.fr.t1; color: root.st.ink; font-family: root.value-font; font-size: min(root.u * 2.1 * root.value-scale, root.fit-half); font-weight: 600; }
+            Text { x: 0; y: root.u * 1.2; height: root.u * 2.6; vertical-alignment: center; text: root.fr.t1; color: root.st.ink; font-family: root.value-font; font-size: min(root.u * 2.1 * root.value-scale, root.fit-col); font-weight: 600; }
         }
         if root.st.show-best: Rectangle {
-            x: root.st.show-last ? root.width / 2 : 0; y: root.u * 6.1; width: root.width / 2; height: root.u * 3.9;
+            x: root.both ? root.width / 2 : 0; y: root.u * 6.1; width: root.col-w; height: root.u * 3.9;
             Caption { x: 0; y: 0; height: root.u * 1.2; vertical-alignment: center; text: "BEST"; color: root.st.muted; size: root.u * 0.9 * root.st.font-scale; }
-            Text { x: 0; y: root.u * 1.2; height: root.u * 2.6; vertical-alignment: center; text: root.fr.t2; color: root.st.accent; font-family: root.value-font; font-size: min(root.u * 2.1 * root.value-scale, root.fit-half); font-weight: 600; }
+            Text { x: 0; y: root.u * 1.2; height: root.u * 2.6; vertical-alignment: center; text: root.fr.t2; color: root.st.accent; font-family: root.value-font; font-size: min(root.u * 2.1 * root.value-scale, root.fit-col); font-weight: 600; }
         }
     }
 }
@@ -938,11 +965,12 @@ export component LabelW inherits Base {
         horizontal-alignment: root.st.align == 0 ? TextHorizontalAlignment.left : root.st.align == 2 ? TextHorizontalAlignment.right : TextHorizontalAlignment.center;
         text: root.fr.t0;
         color: root.fr.c0;
-        font-family: root.value-font;
-        font-size: min(root.height * 0.66 * root.value-scale,
-            root.width / (max(1, self.text.character-count) * (root.st.digital ? 0.62 : 0.52)));
+        // Labels are words, which DSEG7 cannot draw: they stay in Saira whatever `style.font` says.
+        font-family: DashFonts.sans;
+        font-size: min(root.height * 0.66 * root.st.font-scale,
+            root.width / (max(1, self.text.character-count) * 0.52));
         font-weight: 700;
-        letter-spacing: root.st.digital ? 0 : root.height * 0.02;
+        letter-spacing: root.height * 0.02;
     }
 }
 
