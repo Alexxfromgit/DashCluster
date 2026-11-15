@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 const LAP: u8 = 2;
 const TELEMETRY: u8 = 6;
 const STATUS: u8 = 7;
+const HISTORY: u8 = 11;
 const MAX_SAMPLE_AGE: Duration = Duration::from_secs(2);
 
 #[derive(Clone, Copy)]
@@ -96,6 +97,7 @@ pub(crate) struct Decoder {
     session: Option<(SocketAddr, u16, u64, u8)>,
     lap: Option<(Instant, Snapshot)>,
     status: Option<(Instant, Snapshot)>,
+    best_lap: Option<(Instant, f32)>,
 }
 
 impl Decoder {
@@ -106,9 +108,10 @@ impl Decoder {
         let id_offset = if year < 2023 { 5 } else { 6 };
         let kind = header[id_offset];
         let layout = match kind {
-            LAP => format.lap,
-            TELEMETRY => format.telemetry,
-            STATUS => format.status,
+            LAP => Some(format.lap),
+            TELEMETRY => Some(format.telemetry),
+            STATUS => Some(format.status),
+            HISTORY if year >= 2021 => None,
             _ => return Ok(None),
         };
         let player = header[if year < 2023 { 22 } else { 27 }];
@@ -116,23 +119,37 @@ impl Decoder {
         if player == 255 {
             return Ok(None);
         }
-        if header[id_offset - 1] != 1
-            || usize::from(player) >= format.cars
-            || packet.len() != format.header + format.cars * layout.stride + layout.tail
-        {
+        if header[id_offset - 1] != 1 || usize::from(player) >= format.cars {
             return Err(());
         }
+        let body = &packet[format.header..];
+        let history_stride = if year < 2023 { 11 } else { 14 };
+        let car = if let Some(layout) = layout {
+            if body.len() != format.cars * layout.stride + layout.tail {
+                return Err(());
+            }
+            let offset = usize::from(player) * layout.stride;
+            &body[offset..offset + layout.stride]
+        } else {
+            // Session History covers one car per packet: 7 header bytes, 100 laps, 8 tyre stints.
+            if body.len() != 7 + 100 * history_stride + 8 * 3 {
+                return Err(());
+            }
+            if body[0] != player {
+                return Ok(None);
+            }
+            body
+        };
         let uid = u64::from_le_bytes(header[id_offset + 1..id_offset + 9].try_into().unwrap());
         let session = (sender, year, uid, player);
         if self.session != Some(session) {
             *self = Self { session: Some(session), ..Self::default() };
         }
-        let offset = format.header + usize::from(player) * layout.stride;
-        let car = &packet[offset..offset + layout.stride];
         let now = Instant::now();
         match kind {
             LAP => self.lap = Some((now, read_lap(car, year, format.lap_distance_offset))),
             STATUS => self.status = Some((now, read_status(car))),
+            HISTORY => self.best_lap = read_best_lap(car, history_stride).map(|time| (now, time)),
             TELEMETRY => {
                 let mut live = read_telemetry(car, year);
                 live.set(S::RaceTime, float_at(header, id_offset + 9));
@@ -143,12 +160,29 @@ impl Decoder {
                         }
                     }
                 }
+                if let Some((at, time)) = self.best_lap
+                    && now.duration_since(at) < MAX_SAMPLE_AGE
+                {
+                    live.set(S::BestLap, time);
+                }
                 return Ok(Some(live));
             }
             _ => unreachable!(),
         }
         Ok(None)
     }
+}
+
+fn read_best_lap(history: &[u8], stride: usize) -> Option<f32> {
+    let lap_count = usize::from(history[1]);
+    let best_lap = usize::from(history[3]);
+    if best_lap == 0 || best_lap > lap_count || lap_count > 100 {
+        return None;
+    }
+    let offset = 7 + (best_lap - 1) * stride;
+    let valid = history[offset + stride - 1] & 1 != 0;
+    let milliseconds = u32::from_le_bytes(history[offset..offset + 4].try_into().unwrap());
+    (valid && milliseconds != 0).then_some(milliseconds as f32 / 1000.0)
 }
 
 fn read_telemetry(car: &[u8], year: u16) -> Snapshot {
@@ -199,7 +233,7 @@ fn read_lap(car: &[u8], year: u16, distance: usize) -> Snapshot {
     if year <= 2020 {
         snapshot.set_opt(S::BestLap, positive(seconds(if year == 2019 { 8 } else { 12 })));
     }
-    snapshot.set(S::Distance, float_at(car, distance));
+    snapshot.set(S::Distance, float_at(car, distance + 4));
     snapshot.set_opt(S::RacePosition, positive(f32::from(car[distance + 12])));
     snapshot.set_opt(S::LapNumber, positive(f32::from(car[distance + 13])));
     snapshot
@@ -267,11 +301,14 @@ mod tests {
         let mut lap = packet(2025, LAP, 1285);
         let car = 29 + 57;
         lap[car + 4..car + 8].copy_from_slice(&1500_u32.to_le_bytes());
+        lap[car + 20..car + 24].copy_from_slice(&150.0_f32.to_le_bytes());
+        lap[car + 24..car + 28].copy_from_slice(&3850.0_f32.to_le_bytes());
         lap[car + 32] = 3;
         assert!(decoder.decode(&lap, sender).unwrap().is_none());
         let mut data = packet(2025, TELEMETRY, 1352);
         let s = decoder.decode(&data, sender).unwrap().unwrap();
         assert_eq!(s.get(S::LapTime), Some(1.5));
+        assert_eq!(s.get(S::Distance), Some(3850.0));
         assert_eq!(s.get(S::RpmMax), Some(12000.0));
         assert_eq!(s.get(S::RacePosition), Some(3.0));
         data[7] = 1;
@@ -280,5 +317,32 @@ mod tests {
         assert_eq!(s.get(S::RpmMax), None);
         data[27] = 255;
         assert!(decoder.decode(&data, sender).unwrap().is_none());
+    }
+
+    #[test]
+    fn reads_the_players_valid_best_lap_from_session_history() {
+        let sender = "127.0.0.1:1234".parse().unwrap();
+        for (year, header, stride, history_size, telemetry_size) in
+            [(2021, 24, 11, 1155, 1347), (2025, 29, 14, 1460, 1352)]
+        {
+            let mut decoder = Decoder::default();
+            let mut history = packet(year, HISTORY, history_size);
+            let telemetry = packet(year, TELEMETRY, telemetry_size);
+            history[header..header + 4].copy_from_slice(&[1, 3, 0, 2]);
+            let second_lap = header + 7 + stride;
+            history[second_lap..second_lap + 4].copy_from_slice(&72_500_u32.to_le_bytes());
+            history[second_lap + stride - 1] = 1;
+            assert!(decoder.decode(&history, sender).unwrap().is_none());
+            assert_eq!(decoder.decode(&telemetry, sender).unwrap().unwrap().get(S::BestLap), Some(72.5));
+
+            history[header] = 0; // Ignore an opponent's history.
+            history[second_lap + stride - 1] = 0;
+            assert!(decoder.decode(&history, sender).unwrap().is_none());
+            assert_eq!(decoder.decode(&telemetry, sender).unwrap().unwrap().get(S::BestLap), Some(72.5));
+
+            history[header] = 1;
+            assert!(decoder.decode(&history, sender).unwrap().is_none());
+            assert_eq!(decoder.decode(&telemetry, sender).unwrap().unwrap().get(S::BestLap), None);
+        }
     }
 }

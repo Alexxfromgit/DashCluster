@@ -249,12 +249,15 @@ impl App {
         let mut s = self.settings.clone();
         let source = v.source.clamp(0, Settings::SOURCES.len() as i32 - 1) as usize;
         s.source = Settings::SOURCES[source].into();
-        for (value, text, label) in [
-            (&mut s.forza_port, &v.forza_port, "Forza port"),
-            (&mut s.dirt_grid_port, &v.dirt_grid_port, "DiRT / GRID port"),
-            (&mut s.f1_port, &v.f1_port, "F1 port"),
-            (&mut s.hub_port, &v.hub_port, "Hub port"),
+        for (visible, value, text, label) in [
+            (s.source == "forza", &mut s.forza_port, &v.forza_port, "Forza port"),
+            (s.source == "dirt-grid", &mut s.dirt_grid_port, &v.dirt_grid_port, "DiRT / GRID port"),
+            (s.source == "f1", &mut s.f1_port, &v.f1_port, "F1 port"),
+            (v.hub_enabled, &mut s.hub_port, &v.hub_port, "Hub port"),
         ] {
+            if !visible {
+                continue;
+            }
             match port(text, label) {
                 Ok(parsed) => *value = parsed,
                 Err(e) => {

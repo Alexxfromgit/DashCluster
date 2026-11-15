@@ -150,7 +150,6 @@ fn decode(car: &[u8], score: Option<&[u8]>) -> Snapshot {
         s.set_opt(id, (center_k > 0.0).then_some(center_k - 273.15));
     }
     if let Some(row) = score {
-        s.set(S::Distance, double_at(row, 104) as f32);
         s.set_opt(S::BestLap, positive(double_at(row, 144) as f32));
         s.set_opt(S::LastLap, positive(double_at(row, 168) as f32));
         s.set_opt(S::RacePosition, positive(f32::from(row[199])));
@@ -183,6 +182,7 @@ mod tests {
         car[200..208].copy_from_slice(&(-35.0_f64).to_le_bytes());
         car[224..232].copy_from_slice(&(-1.5_f64).to_le_bytes());
         car[984..992].copy_from_slice(&353.15_f64.to_le_bytes());
+        score[104..112].copy_from_slice(&150.0_f64.to_le_bytes()); // distance into the current lap
         score[199] = 4;
         let s = decode(&car, Some(&score));
         assert_eq!(s.get(S::LapTime), Some(3.0));
@@ -190,6 +190,7 @@ mod tests {
         assert_eq!(s.get(S::AccelLong), Some(1.5));
         assert_eq!(s.get(S::TyreTempFl), Some(80.0));
         assert_eq!(s.get(S::RacePosition), Some(4.0));
+        assert_eq!(s.get(S::Distance), None);
         assert_eq!(s.get(S::TyreTempFr), None);
         assert_eq!(decode(&car, None).get(S::RacePosition), None);
     }

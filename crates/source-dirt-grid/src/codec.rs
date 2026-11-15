@@ -39,7 +39,7 @@ pub(crate) fn parse(packet: &[u8]) -> Option<Snapshot> {
         let value = field(index);
         snapshot.set_opt(signal, (value >= 0.0).then_some(value));
     }
-    for (signal, index) in [(S::Distance, 2), (S::PosX, 4), (S::PosY, 5), (S::PosZ, 6)] {
+    for (signal, index) in [(S::Distance, 3), (S::PosX, 4), (S::PosY, 5), (S::PosZ, 6)] {
         snapshot.set(signal, field(index));
     }
     for (signal, index) in [(S::Throttle, 29), (S::Brake, 31), (S::Clutch, 32)] {
@@ -78,6 +78,8 @@ mod tests {
         let mut packet = [0; 264];
         for (offset, value) in [
             (4, 12.25_f32),
+            (8, 150.0),
+            (12, 3850.0),
             (28, 30.0),
             (116, 0.75),
             (120, -0.25),
@@ -106,6 +108,7 @@ mod tests {
             assert_eq!(s.get(S::Clutch), Some(0.125));
             assert_eq!(s.get(S::AccelLong), Some(STANDARD_GRAVITY));
             assert_eq!(s.get(S::LapTime), Some(12.25));
+            assert_eq!(s.get(S::Distance), Some(3850.0));
             assert_eq!(s.get(S::RpmMax), (size >= 256).then_some(8000.0));
             assert_eq!(s.get(S::RpmIdle), (size == 264).then_some(950.0));
             assert_eq!(s.get(S::RacePosition), (size >= 256).then_some(2.0));
