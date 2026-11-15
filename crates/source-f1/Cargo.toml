@@ -1,0 +1,16 @@
+[package]
+name = "source-f1"
+description = "Codemasters F1 2019–25 UDP telemetry source"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+cluster-core.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

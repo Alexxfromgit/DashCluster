@@ -14,6 +14,9 @@ homepage = "https://github.com/Alexxfromgit/DashCluster"
 [workspace.dependencies]
 cluster-core = { path = "crates/cluster-core" }
 source-demo = { path = "crates/source-demo" }
+source-dirt-grid = { path = "crates/source-dirt-grid" }
+source-f1 = { path = "crates/source-f1" }
+source-shm = { path = "crates/source-shm" }
 source-forza = { path = "crates/source-forza" }
 cluster-ui = { path = "crates/cluster-ui" }
 cluster-layout = { path = "crates/cluster-layout" }

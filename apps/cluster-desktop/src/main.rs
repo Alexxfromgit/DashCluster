@@ -38,7 +38,7 @@ struct Cli {
     /// Press D in the app to toggle the demo car.
     #[arg(long, value_enum, global = true)]
     source: Option<Source>,
-    /// UDP port Forza sends to (Forza: Settings → HUD and Gameplay → Data Out IP Port).
+    /// UDP port to listen on (defaults to 5300 for Forza or 20777 for DiRT / GRID and F1).
     #[arg(long, global = true)]
     port: Option<u16>,
     /// Record raw Forza packets to this .ctlog file.
@@ -73,6 +73,14 @@ struct Cli {
 enum Source {
     /// Forza Motorsport / Horizon Data Out (UDP)
     Forza,
+    /// Legacy Codemasters DiRT / GRID telemetry (UDP)
+    DirtGrid,
+    /// F1 2019–25 telemetry (UDP)
+    F1,
+    /// Assetto Corsa Competizione shared memory (Windows)
+    Acc,
+    /// Le Mans Ultimate native shared memory (Windows)
+    Lmu,
     /// Built-in simulated car
     Demo,
     /// Play a .ctlog recording (see --replay)
@@ -132,6 +140,10 @@ fn effective_settings(cli: &Cli, saved: &settings::Settings) -> settings::Settin
     }
     match cli.source {
         Some(Source::Forza) => s.source = "forza".into(),
+        Some(Source::DirtGrid) => s.source = "dirt-grid".into(),
+        Some(Source::F1) => s.source = "f1".into(),
+        Some(Source::Acc) => s.source = "acc".into(),
+        Some(Source::Lmu) => s.source = "lmu".into(),
         Some(Source::Demo) => s.source = "demo".into(),
         Some(Source::Hub) => {
             s.source = "hub".into();
@@ -140,7 +152,11 @@ fn effective_settings(cli: &Cli, saved: &settings::Settings) -> settings::Settin
         Some(Source::Replay) | None => {}
     }
     if let Some(p) = cli.port {
-        s.forza_port = p;
+        match s.source.as_str() {
+            "dirt-grid" => s.dirt_grid_port = p,
+            "f1" => s.f1_port = p,
+            _ => s.forza_port = p,
+        }
     }
     if let Some(p) = cli.hub_port {
         s.hub_port = p;
@@ -154,6 +170,10 @@ fn effective_settings(cli: &Cli, saved: &settings::Settings) -> settings::Settin
 fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
     Ok(match cli.source.unwrap_or(Source::Forza) {
         Source::Forza => SourceKind::Forza,
+        Source::DirtGrid => SourceKind::DirtGrid,
+        Source::F1 => SourceKind::F1,
+        Source::Acc => SourceKind::Acc,
+        Source::Lmu => SourceKind::Lmu,
         Source::Demo => SourceKind::Demo,
         Source::Replay => SourceKind::Replay(
             cli.replay.clone().ok_or_else(|| anyhow::anyhow!("--source replay needs --replay FILE"))?,
@@ -162,9 +182,11 @@ fn source_kind(cli: &Cli) -> anyhow::Result<SourceKind> {
     })
 }
 
-fn source_config(cli: &Cli) -> SourceConfig {
+fn source_config(cli: &Cli, settings: &settings::Settings) -> SourceConfig {
     SourceConfig {
-        forza_port: cli.port.unwrap_or(source_forza::DEFAULT_PORT),
+        forza_port: settings.forza_port,
+        dirt_grid_port: settings.dirt_grid_port,
+        f1_port: settings.f1_port,
         record: cli.record.clone(),
         forward: cli.forward.clone(),
         replay_speed: cli.replay_speed,
@@ -229,7 +251,8 @@ fn snapshot(
     let dt = 1.0 / 60.0;
     let (snap, source_label) = if live {
         let bus = SignalBus::new();
-        let _sources = Sources::new(bus.clone(), source_config(cli), source_kind(cli)?);
+        let settings = effective_settings(cli, &settings::Settings::default());
+        let _sources = Sources::new(bus.clone(), source_config(cli, &settings), source_kind(cli)?);
         let end = Instant::now() + Duration::from_secs_f32(seconds);
         while Instant::now() < end {
             view.update(&bus.latest().snapshot, dt);
@@ -258,10 +281,12 @@ fn snapshot(
             );
         }
         Some("settings") => {
-            let s = settings::Settings { units: cluster_core::UnitPrefs::imperial(), ..Default::default() };
+            let s = effective_settings(cli, &settings::Settings::default());
             ui.set_ui_settings(cluster_ui::UiSettings {
-                source: 0,
+                source: s.source_index(),
                 forza_port: s.forza_port.to_string().into(),
+                dirt_grid_port: s.dirt_grid_port.to_string().into(),
+                f1_port: s.f1_port.to_string().into(),
                 hub_address: "".into(),
                 hub_enabled: true,
                 hub_port: s.hub_port.to_string().into(),
@@ -327,13 +352,8 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
     if cli.dashboard.is_none() && cli.dashboards.is_empty() && !saved.dashboard.is_empty() {
         lib.select(&saved.dashboard);
     }
-    let config = SourceConfig {
-        forza_port: settings.forza_port,
-        record: cli.record.clone(),
-        forward: cli.forward.clone(),
-        replay_speed: cli.replay_speed,
-    };
-    let first_run = !saved.setup_seen;
+    let config = source_config(cli, &settings);
+    let first_run = !saved.setup_seen && settings.source == "forza";
     ui.set_on_top(settings.always_on_top);
     ui.set_show_status(settings.show_status);
     ui.set_forza_port_text(settings.forza_port.to_string().into());

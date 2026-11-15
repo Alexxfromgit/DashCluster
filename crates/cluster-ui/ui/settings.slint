@@ -3,9 +3,11 @@
 import { Button, LineEdit, CheckBox, ComboBox, ScrollView, AboutSlint } from "std-widgets.slint";
 
 export struct UiSettings {
-    // 0 forza, 1 demo, 2 network hub
+    // Index into Settings::SOURCES in the desktop app.
     source: int,
     forza-port: string,
+    dirt-grid-port: string,
+    f1-port: string,
     hub-address: string,
     hub-enabled: bool,
     hub-port: string,
@@ -68,7 +70,7 @@ export component SettingsPanel inherits Rectangle {
                     Row {
                         label: "Source";
                         ComboBox {
-                            model: ["Forza (Data Out)", "Demo car", "Another DashCluster (network hub)"];
+                            model: ["Forza (Data Out)", "Demo car", "Another DashCluster (network hub)", "DiRT / GRID (UDP)", "F1 2019–25 (UDP)", "Assetto Corsa Competizione (Windows)", "Le Mans Ultimate (Windows)"];
                             current-index: root.s.source;
                             selected => { root.s.source = self.current-index; }
                         }
@@ -84,6 +86,32 @@ export component SettingsPanel inherits Rectangle {
                             placeholder-text: "automatic, or 192.168.1.20:5380";
                             edited(t) => { root.s.hub-address = t; }
                         }
+                    }
+                    if root.s.source == 3: Row {
+                        label: "DiRT / GRID UDP port";
+                        LineEdit { text: root.s.dirt-grid-port; input-type: number; edited(t) => { root.s.dirt-grid-port = t; } }
+                    }
+                    if root.s.source == 3: Text {
+                        text: "Enable UDP in the game's hardware settings. Use extradata 3, or 1 for GRID 2. Set the game to send to this port.";
+                        color: #8b96a5;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    if root.s.source == 4: Row {
+                        label: "F1 UDP port";
+                        LineEdit { text: root.s.f1-port; input-type: number; edited(t) => { root.s.f1-port = t; } }
+                    }
+                    if root.s.source == 4: Text {
+                        text: "Turn on UDP Telemetry in F1. Set the destination IP and port for this computer and select a 2019–25 UDP format.";
+                        color: #8b96a5;
+                        font-size: 12px;
+                        wrap: word-wrap;
+                    }
+                    if root.s.source == 5 || root.s.source == 6: Text {
+                        text: "Run DashCluster on the Windows PC running the game, then start a driving session.";
+                        color: #8b96a5;
+                        font-size: 12px;
+                        wrap: word-wrap;
                     }
                     Section { text: "PHONES AND OTHER SCREENS"; }
                     Row {
@@ -141,7 +169,7 @@ export component SettingsPanel inherits Rectangle {
             if root.message != "": Text { text: root.message; color: #ffb4ab; font-size: 12px; wrap: word-wrap; }
             HorizontalLayout {
                 spacing: 8px;
-                Button { text: "Setup guide"; clicked => { root.show-guide(); } }
+                if root.s.source < 3: Button { text: "Setup guide"; clicked => { root.show-guide(); } }
                 Rectangle { horizontal-stretch: 1; }
                 Button { text: "Cancel"; clicked => { root.cancel(); } }
                 Button { text: "Apply"; primary: true; clicked => { root.apply(root.s); } }

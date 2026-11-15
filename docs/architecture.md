@@ -19,8 +19,11 @@
 | `cluster-ui` | Slint: the widget library (`widgets.slint`), the scaled `Dashboard`, the editor and settings panels, `DashboardView` (keeps the Slint models in sync with the evaluator) and an offscreen renderer for headless PNGs |
 | `cluster-net` | The hub: axum serves the embedded web display and `/ws`, which streams binary frames and JSON control messages; mDNS advertisement |
 | `source-demo` | A deterministic simulated car (gearbox, track, temperatures); also a test fixture |
+| `source-dirt-grid` | Legacy Codemasters DiRT and GRID UDP listener and 152/256/264-byte packet decoder |
+| `source-f1` | F1 2019–25 UDP reader, merging the player's telemetry with lap and car status packets |
 | `source-forza` | Forza *Data Out* codec (format by packet length), UDP listener, `.ctlog` recorder and replay |
 | `source-net` | Mirrors another hub (address or mDNS discovery) |
+| `source-shm` | Windows shared-memory readers for Assetto Corsa Competizione and Le Mans Ultimate |
 | `apps/cluster-desktop` | The `dashcluster` binary: library of dashboards, hot reload, editor controller, settings, sources, hub, CLI |
 | `apps/cluster-web` | The browser display: the same `cluster-ui` compiled to WebAssembly, fed by the hub's WebSocket |
 | `tools/forza-fake` | Sends Forza packets from the demo car or a recording |

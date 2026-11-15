@@ -9,6 +9,10 @@ use std::sync::Arc;
 pub enum SourceKind {
     Demo,
     Forza,
+    DirtGrid,
+    F1,
+    Acc,
+    Lmu,
     Replay(PathBuf),
     /// Mirror another DashCluster hub (`None` = discover via mDNS).
     Hub(Option<String>),
@@ -17,6 +21,8 @@ pub enum SourceKind {
 #[derive(Debug, Clone)]
 pub struct SourceConfig {
     pub forza_port: u16,
+    pub dirt_grid_port: u16,
+    pub f1_port: u16,
     pub record: Option<PathBuf>,
     pub forward: Vec<SocketAddr>,
     pub replay_speed: f32,
@@ -66,6 +72,10 @@ impl Sources {
         }
         let source: Box<dyn TelemetrySource> = match &kind {
             SourceKind::Demo => Box::new(source_demo::DemoSource::default()),
+            SourceKind::DirtGrid => Box::new(source_dirt_grid::DirtGridSource { port: self.config.dirt_grid_port }),
+            SourceKind::F1 => Box::new(source_f1::F1Source { port: self.config.f1_port }),
+            SourceKind::Acc => Box::new(source_shm::SharedMemorySource::Acc),
+            SourceKind::Lmu => Box::new(source_shm::SharedMemorySource::Lmu),
             SourceKind::Forza => {
                 let mut f = source_forza::ForzaSource::new(self.config.forza_port);
                 f.record = self.recorder.clone();

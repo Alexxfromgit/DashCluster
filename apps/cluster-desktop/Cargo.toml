@@ -18,8 +18,11 @@ cluster-layout.workspace = true
 notify.workspace = true
 cluster-ui = { workspace = true, features = ["offscreen"] }
 source-demo.workspace = true
+source-dirt-grid.workspace = true
+source-f1.workspace = true
 source-forza.workspace = true
 source-net.workspace = true
+source-shm.workspace = true
 cluster-net.workspace = true
 qrcode.workspace = true
 serde_json.workspace = true
