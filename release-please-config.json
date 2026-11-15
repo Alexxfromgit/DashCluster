@@ -25,7 +25,8 @@
       "bump-minor-pre-major": true,
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        { "type": "generic", "path": "Cargo.toml" }
+        { "type": "generic", "path": "Cargo.toml" },
+        { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(!@.source)].version" }
       ]
     }
   }
