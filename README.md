@@ -45,7 +45,7 @@ for tall phones. At other aspect ratios, the instruments scale together and the 
 
 | Area | Details |
 |---|---|
-| Games | Forza Horizon 4/5, Forza Motorsport (2023) and Forza Motorsport 7 via *Data Out* (UDP). Built so other sims and real cars (OBD-II) can be added as sources |
+| Games | Forza Horizon 4/5 and Forza Motorsport (7 and 2023). Preview sources for DiRT 4, DiRT Rally, DiRT Rally 2.0, GRID 2, GRID Autosport, GRID (2019), GRID Legends, F1 2019–25, Assetto Corsa Competizione and Le Mans Ultimate |
 | Dashboards | Nine built-in layouts and 13 widget types, including analog dials, segmented RPM bars, gear indicators, lap timers and layered panels |
 | Editor | Visual editor (move, resize, snap, align, undo/redo, property inspector) or plain JSON5 files that reload when saved; `.cluster` packages to share dashboards with their images |
 | Screens | Desktop window (fullscreen, always on top), phone/tablet browser via QR code (no app to install), other computers mirror the first one automatically |
@@ -92,6 +92,51 @@ The first launch shows these steps with your computer's address filled in (**H**
 
 Forza does not send coolant/oil temperature, ABS/TC or indicator data, so widgets bound to those
 stay dimmed with Forza. The sample dashboards use what Forza provides.
+
+## Connect DiRT or GRID on PC
+
+1. Select **DiRT / GRID (UDP)** in DashCluster Settings (**P**) and apply. The default port is `20777`.
+2. Close the game and edit its `hardware_settings_config.xml` in `Documents/My Games/<game>/hardwaresettings/`.
+   The game creates the file on its first launch. Edit the existing telemetry entry for your title.
+
+   | Game | XML entry | `extradata` |
+   |---|---|---|
+   | DiRT 4, DiRT Rally, DiRT Rally 2.0, GRID (2019), GRID Legends | `<udp ... />` under `<motion_platform>` | `3` |
+   | GRID Autosport | `<motion ... />` | `3` |
+   | GRID 2 | `<motion ... />` | `1` |
+
+   Set `enabled="true"`, `port="20777"`, `delay="1"`, and `ip="127.0.0.1"` for the same PC.
+   For a separate DashCluster computer, use its LAN address. If you chose a different port, set it in both places.
+3. Restart the game and enter a race or stage. Speed, RPM, gear and pedals use the common packet layout.
+   Lap, fuel and RPM limit availability depends on the game and packet size. GRID 2's compact layout
+   supplies distance on the opening lap. Cumulative distance on later laps requires the track length
+   from an extended packet.
+
+From a terminal, use `cargo run -p cluster-desktop -- --source dirt-grid`. The guide uses the
+[DiRT](https://horizonlabshud.com/games/dirt/) and [GRID](https://horizonlabshud.com/games/grid/)
+telemetry settings documented by Horizon Labs.
+
+## Connect F1 2019–25
+
+1. Select **F1 2019–25 (UDP)** in DashCluster Settings (**P**) and apply. The default port is `20777`.
+2. In F1's telemetry settings, enable **UDP Telemetry**. Set the port to match DashCluster and set
+   the IP address to `127.0.0.1` for the same PC or the DashCluster computer's LAN address.
+3. Choose a UDP format from **2019** through **2025**. If F1 25 defaults to the 2026 Season Pack format,
+   change it to **2025**. Start driving to populate the gauges.
+
+The terminal equivalent is `cargo run -p cluster-desktop -- --source f1`. See
+[EA's F1 25 UDP specifications](https://forums.ea.com/blog/f1-games-game-info-hub-en/ea-sports%E2%84%A2-f1%C2%AE25-2026-season-pack-udp-specification/12187347).
+
+## Connect Assetto Corsa Competizione or Le Mans Ultimate
+
+Run DashCluster on the Windows PC running the game. In Settings (**P**), choose **Assetto Corsa
+Competizione (Windows)** or **Le Mans Ultimate (Windows)**, apply, and start a driving session.
+LMU uses the native `LMU_Data` interface shipped with current builds. A phone can connect to
+DashCluster's hub while the desktop reads the game locally.
+
+The terminal sources are `--source acc` and `--source lmu`. See the
+[ACC shared-memory reference](https://www.assettocorsamods.net/threads/doc-shared-memory-reference-acc.3061/)
+and [LMU shared-memory release notes](https://guide.lemansultimate.com/hc/en-gb/articles/14556121957775-V1-2-Update-2).
 
 ## Keys
 

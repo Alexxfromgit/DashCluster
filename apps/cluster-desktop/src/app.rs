@@ -181,6 +181,10 @@ impl App {
     pub fn source_kind(&self) -> SourceKind {
         match self.settings.source.as_str() {
             "demo" => SourceKind::Demo,
+            "dirt-grid" => SourceKind::DirtGrid,
+            "f1" => SourceKind::F1,
+            "acc" => SourceKind::Acc,
+            "lmu" => SourceKind::Lmu,
             "hub" => SourceKind::Hub(
                 (!self.settings.hub_address.trim().is_empty()).then(|| self.settings.hub_address.trim().to_owned()),
             ),
@@ -193,12 +197,10 @@ impl App {
         let s = &self.settings;
         let u = &s.units;
         UiSettings {
-            source: match s.source.as_str() {
-                "demo" => 1,
-                "hub" => 2,
-                _ => 0,
-            },
+            source: s.source_index(),
             forza_port: s.forza_port.to_string().into(),
+            dirt_grid_port: s.dirt_grid_port.to_string().into(),
+            f1_port: s.f1_port.to_string().into(),
             hub_address: s.hub_address.clone().into(),
             hub_enabled: s.hub_enabled,
             hub_port: s.hub_port.to_string().into(),
@@ -244,19 +246,28 @@ impl App {
         let port = |t: &str, what: &str| {
             t.trim().parse::<u16>().ok().filter(|p| *p > 0).ok_or(format!("{what} must be a number from 1 to 65535"))
         };
-        let (forza_port, hub_port) = match (port(&v.forza_port, "Forza port"), port(&v.hub_port, "Hub port")) {
-            (Ok(a), Ok(b)) => (a, b),
-            (Err(e), _) | (_, Err(e)) => {
-                ui.set_settings_message(e.into());
-                return;
-            }
-        };
         let mut s = self.settings.clone();
-        s.source = ["forza", "demo", "hub"][v.source.clamp(0, 2) as usize].into();
-        s.forza_port = forza_port;
+        let source = v.source.clamp(0, Settings::SOURCES.len() as i32 - 1) as usize;
+        s.source = Settings::SOURCES[source].into();
+        for (visible, value, text, label) in [
+            (s.source == "forza", &mut s.forza_port, &v.forza_port, "Forza port"),
+            (s.source == "dirt-grid", &mut s.dirt_grid_port, &v.dirt_grid_port, "DiRT / GRID port"),
+            (s.source == "f1", &mut s.f1_port, &v.f1_port, "F1 port"),
+            (v.hub_enabled, &mut s.hub_port, &v.hub_port, "Hub port"),
+        ] {
+            if !visible {
+                continue;
+            }
+            match port(text, label) {
+                Ok(parsed) => *value = parsed,
+                Err(e) => {
+                    ui.set_settings_message(e.into());
+                    return;
+                }
+            }
+        }
         s.hub_address = v.hub_address.trim().to_owned();
         s.hub_enabled = v.hub_enabled;
-        s.hub_port = hub_port;
         s.units = UnitPrefs {
             speed: [SpeedUnit::Kmh, SpeedUnit::Mph, SpeedUnit::Ms][v.speed.clamp(0, 2) as usize],
             temperature: [TempUnit::Celsius, TempUnit::Fahrenheit][v.temperature.clamp(0, 1) as usize],
@@ -272,10 +283,15 @@ impl App {
         if old.hub_enabled != s.hub_enabled || old.hub_port != s.hub_port {
             self.restart_hub();
         }
-        let source_changed =
-            old.source != s.source || old.forza_port != s.forza_port || old.hub_address != s.hub_address;
+        let source_changed = old.source != s.source
+            || old.forza_port != s.forza_port
+            || old.dirt_grid_port != s.dirt_grid_port
+            || old.f1_port != s.f1_port
+            || old.hub_address != s.hub_address;
         if source_changed {
             self.sources.config.forza_port = s.forza_port;
+            self.sources.config.dirt_grid_port = s.dirt_grid_port;
+            self.sources.config.f1_port = s.f1_port;
             let kind = self.source_kind();
             self.sources.start(kind);
         }
@@ -293,7 +309,18 @@ impl App {
         macro_rules! keep_changes {
             ($($f:ident),*) => { $( if old.$f != s.$f { saved.$f = s.$f.clone(); } )* };
         }
-        keep_changes!(source, forza_port, hub_address, hub_enabled, hub_port, units, start_fullscreen, always_on_top);
+        keep_changes!(
+            source,
+            forza_port,
+            dirt_grid_port,
+            f1_port,
+            hub_address,
+            hub_enabled,
+            hub_port,
+            units,
+            start_fullscreen,
+            always_on_top
+        );
         saved.save();
         ui.set_show_settings(false);
         self.toast("Settings saved");

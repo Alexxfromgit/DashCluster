@@ -110,8 +110,8 @@ fn connect(ui: slint::Weak<MainWindow>, state: Rc<RefCell<WebState>>) {
             let bytes = js_sys::Uint8Array::new(&buf).to_vec();
             if let Some(s) = wire::decode_frame(&bytes) {
                 let mut st = st2.borrow_mut();
+                st.last_frame_ms = s.iter().next().map(|_| now_ms());
                 st.snap = s;
-                st.last_frame_ms = Some(now_ms());
             }
         } else if let Some(text) = e.data().as_string()
             && let Some(ui) = ui2.upgrade()

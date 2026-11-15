@@ -2,4 +2,5 @@
 *.ps1 text eol=crlf
 *.png binary
 *.ctlog binary
+*.lmucap binary
 *.cluster binary

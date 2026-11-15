@@ -880,7 +880,7 @@ dependencies = [
 
 [[package]]
 name = "cluster-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -892,7 +892,7 @@ dependencies = [
 
 [[package]]
 name = "cluster-desktop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -911,15 +911,18 @@ dependencies = [
  "serde_json",
  "slint",
  "source-demo",
+ "source-dirt-grid",
+ "source-f1",
  "source-forza",
  "source-net",
+ "source-shm",
  "windows-sys 0.61.2",
  "zip",
 ]
 
 [[package]]
 name = "cluster-layout"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cluster-core",
  "json5",
@@ -930,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "cluster-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -945,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "cluster-ui"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cluster-core",
@@ -958,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "cluster-web"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cluster-core",
  "cluster-layout",
@@ -1687,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "forza-fake"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3070,7 +3073,7 @@ dependencies = [
 
 [[package]]
 name = "license-notices"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -4975,15 +4978,33 @@ dependencies = [
 
 [[package]]
 name = "source-demo"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cluster-core",
 ]
 
 [[package]]
+name = "source-dirt-grid"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "cluster-core",
+ "source-forza",
+]
+
+[[package]]
+name = "source-f1"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "cluster-core",
+ "source-forza",
+]
+
+[[package]]
 name = "source-forza"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cluster-core",
@@ -4993,7 +5014,7 @@ dependencies = [
 
 [[package]]
 name = "source-net"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cluster-core",
@@ -5002,6 +5023,15 @@ dependencies = [
  "mdns-sd",
  "serde_json",
  "tungstenite",
+]
+
+[[package]]
+name = "source-shm"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "cluster-core",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -75,9 +75,10 @@ impl SignalBus {
         self.publishes.load(Ordering::Relaxed)
     }
 
-    /// Seconds since the last publish, or `None` if nothing was ever published.
+    /// Age of the latest telemetry frame. An empty frame clears the current telemetry.
     pub fn age_secs(&self) -> Option<f32> {
-        (self.publish_count() > 0).then(|| self.latest.load().at.elapsed().as_secs_f32())
+        let latest = self.latest.load();
+        latest.snapshot.iter().next().map(|_| latest.at.elapsed().as_secs_f32())
     }
 
     pub fn status(&self) -> Arc<SourceStatus> {
@@ -100,5 +101,23 @@ impl SignalBus {
     pub fn reset(&self) {
         self.latest.store(Arc::new(Stamped { snapshot: Snapshot::new(), at: Instant::now() }));
         self.publishes.store(0, Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::SignalId;
+
+    #[test]
+    fn clearing_telemetry_preserves_frame_delivery_without_looking_fresh() {
+        let bus = SignalBus::new();
+        let mut frame = Snapshot::new();
+        frame.set(SignalId::Rpm, 3000.0);
+        bus.publish(frame);
+        assert!(bus.age_secs().is_some());
+        bus.publish(Snapshot::new());
+        assert_eq!(bus.publish_count(), 2);
+        assert!(bus.age_secs().is_none());
     }
 }

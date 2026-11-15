@@ -7,9 +7,11 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// "forza", "demo" or "hub".
+    /// "forza", "dirt-grid", "f1", "acc", "lmu", "demo" or "hub".
     pub source: String,
     pub forza_port: u16,
+    pub dirt_grid_port: u16,
+    pub f1_port: u16,
     /// Hub to mirror when `source == "hub"`; empty = find one automatically.
     pub hub_address: String,
     /// Run this app's own hub (phones and other displays).
@@ -32,6 +34,8 @@ impl Default for Settings {
         Settings {
             source: "forza".into(),
             forza_port: source_forza::DEFAULT_PORT,
+            dirt_grid_port: source_dirt_grid::DEFAULT_PORT,
+            f1_port: source_f1::DEFAULT_PORT,
             hub_address: String::new(),
             hub_enabled: true,
             hub_port: cluster_net::DEFAULT_PORT,
@@ -51,6 +55,12 @@ pub fn path() -> PathBuf {
 }
 
 impl Settings {
+    pub const SOURCES: [&'static str; 7] = ["forza", "demo", "hub", "dirt-grid", "f1", "acc", "lmu"];
+
+    pub fn source_index(&self) -> i32 {
+        Self::SOURCES.iter().position(|id| *id == self.source).unwrap_or(0) as i32
+    }
+
     pub fn load() -> Settings {
         match std::fs::read_to_string(path()) {
             Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
@@ -81,6 +91,7 @@ mod tests {
     fn missing_fields_use_defaults() {
         let s: Settings = serde_json::from_str(r#"{ "forza_port": 6000, "units": { "speed": "mph" } }"#).unwrap();
         assert_eq!(s.forza_port, 6000);
+        assert_eq!(s.dirt_grid_port, 20777);
         assert_eq!(s.units.speed, cluster_core::units::SpeedUnit::Mph);
         assert_eq!(s.source, "forza");
         assert!(s.hub_enabled);

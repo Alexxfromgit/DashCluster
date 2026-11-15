@@ -29,6 +29,18 @@ See [docs/architecture.md](docs/architecture.md) for how the crates fit together
 Run `dashcluster --help` for every option. On Windows the release build is a windowed app; when
 started from a terminal with arguments it writes its output (help, errors, logs) to that terminal.
 
+### Telemetry smoke tests
+
+```sh
+cargo test --locked --lib -p source-dirt-grid -p source-f1 -p source-shm captured_
+```
+
+This is the Linux CI job's command. It uses public-safe excerpts from DiRT Rally, GRID 2, F1 25 and
+Le Mans Ultimate. Fixture preparation keeps a small set of numeric gauge inputs, clears all unused
+bytes, and supplies synthetic identifiers and capture timestamps. The fixtures exclude account data,
+driver names, other players' data and track coordinates. Keep full recordings outside public
+Git history. See the fixture directories in the three source crates for the packet layouts.
+
 ### Phone display
 
 `./scripts/build-web.sh` (Windows: `.\scripts\build-web.ps1`) builds `apps/cluster-web` to
