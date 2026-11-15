@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/Alexxfromgit/DashCluster/compare/v0.1.1...v0.2.0) (2026-11-15)
+
+
+### Features
+
+* add five dashboards and improve screen fit ([#3](https://github.com/Alexxfromgit/DashCluster/issues/3)) ([c2d9f8e](https://github.com/Alexxfromgit/DashCluster/commit/c2d9f8efa1e4d96537f8a5078b4226b5285d0b13))
+* add telemetry for DiRT, GRID, F1, ACC and Le Mans Ultimate ([#6](https://github.com/Alexxfromgit/DashCluster/issues/6)) ([4de531a](https://github.com/Alexxfromgit/DashCluster/commit/4de531a5bd5b93b83531d915425eba2c80bd8a3b))
+* restyle the dashboards like motorsport displays ([#5](https://github.com/Alexxfromgit/DashCluster/issues/5)) ([b4cf435](https://github.com/Alexxfromgit/DashCluster/commit/b4cf4350b798bd134cd6887d980815faa2ba8e83))
+
 ## [0.1.1](https://github.com/Alexxfromgit/DashCluster/compare/v0.1.0...v0.1.1) (2026-11-12)
 
 
